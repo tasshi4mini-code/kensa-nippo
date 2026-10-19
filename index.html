@@ -742,10 +742,10 @@ function workbook(sheets){
 
 
 // ---- Excel ----
-const DATA_HEAD=["検査日","作業者","No","パレット内残品","検査開始","検査終了","ロット","品番","品名","マスター登録","総数",...DEFS.map(d=>d[1]),"不良数","不良率(%)","修正頻度","○(鋳コブ/バリ/焼き付き)","備考","記録確認"];
+const DATA_HEAD=["検査日","作業者","No","パレット内残品","検査開始","検査終了","ロット","品番","品名","マスター登録","総数",...DEFS.map(d=>d[1]),"不良数","不良率(%)","修正頻度","○(鋳コブ/バリ/焼き付き)","備考","記録確認","ロット1","ロット1総数","ロット2","ロット2総数"];
 function dataRows(){ const out=[DATA_HEAD];
   state.rows.forEach((r,i)=>{ if(!rowHas(r)) return; const x=rateOf(r);
-    out.push([state.date,state.equip,i+1,r.pal,r.st,r.en,r.lot,r.hin,r.name,r.hin?(r.ok?"○":"×"):"",r.total,...DEFK.map(k=>r.d[k]),ngOf(r)||"",x==null?"":Math.round(x*100)/100,r.freq,fixTxt(r),r.note,state.confirmBy]); });
+    out.push([state.date,state.equip,i+1,r.pal,r.st,r.en,r.lot,r.hin,r.name,r.hin?(r.ok?"○":"×"):"",r.total,...DEFK.map(k=>r.d[k]),ngOf(r)||"",x==null?"":Math.round(x*100)/100,r.freq,fixTxt(r),r.note,state.confirmBy,...(()=>{ lotInit(r); return [r.lot1,r.lot2?r.t1:r.total,r.lot2,r.lot2?r.t2:""]; })()]); });
   return out; }
 function workRows(){ const out=[["検査日","作業者","No","開始","終了","ほかの作業","ほかの工程","テスト","メモ"]]; liveWorks().forEach((w,i)=>out.push([state.date,state.equip,i+1,w.start,w.end,w.work,w.proc,w.test?"○":"",w.memo])); return out; }
 function eventRows(){ const out=[["検査日","作業者","No","発生時間","終了時間","担当","異常/変化点内容","処置内容"]]; liveEvents().forEach((e,i)=>out.push([state.date,state.equip,i+1,e.start,e.end,e.person,e.content,e.action])); return out; }
@@ -776,7 +776,7 @@ function buildNippoSheet(){
 }
 function tableSheet(name,rows,widths){ const S=new Sheet(name); S.freeze=1; S.cols=widths; const H=st({font:1,fill:"head",border:1,h:"center",wrap:true});
   rows.forEach((row,r)=>row.forEach((v,c)=>S.set(c,r,v,r===0?H:st({border:1})))); S.autoFilter="A1:"+ref(rows[0].length-1,Math.max(rows.length-1,0)); S.heights[0]=32; return S; }
-function buildXlsx(){ return workbook([buildNippoSheet(), tableSheet("データ",dataRows(),[11,10,5,8,8,8,12,16,8,8,7,...DEFK.map(()=>7),7,8,8,14,24,10]), tableSheet("その他作業",workRows(),[11,10,5,8,8,10,10,7,30]), tableSheet("異常変化点",eventRows(),[11,10,5,9,9,10,50,50])]); }
+function buildXlsx(){ return workbook([buildNippoSheet(), tableSheet("データ",dataRows(),[11,10,5,8,8,8,12,16,8,8,7,...DEFK.map(()=>7),7,8,8,14,24,10,11,8,11,8]), tableSheet("その他作業",workRows(),[11,10,5,8,8,10,10,7,30]), tableSheet("異常変化点",eventRows(),[11,10,5,9,9,10,50,50])]); }
 $("btnCsv").onclick=async()=>{
   if(!state.rows.some(rowHas)&&!liveEvents().length&&!liveWorks().length){ toast("入力データがありません"); return; }
   await Sync.flush();
@@ -965,7 +965,7 @@ renderAll();
 if(VIEW){ $("viewBadge").hidden=false; document.title="検査日報（閲覧用）"; document.querySelectorAll("#entryCard input,#entryCard textarea,.card input").forEach(el=>el.readOnly=true); }
 if(!VIEW&&!inspList().length) setTimeout(()=>toast("「設定」→「検査員の名前」で5人の名前を登録してください"),800);
 Sync.status(); Sync.flush().then(()=>Sync.pull()); Sync.loadMaster(false);
-const EXP={master:()=>Sync.loadMaster(true), load:(d,q)=>load(d,q), empty:()=>!state.rows.some(rowHas)&&!liveEvents().length&&!liveWorks().length, name:()=>"検査日報_"+state.equip.replace(/[\\/:*?"<>|（）() ]/g,"")+"_"+state.date.replace(/-/g,"")+".xlsx"};
+const EXP={csv:()=>dataRows(), master:()=>Sync.loadMaster(true), load:(d,q)=>load(d,q), empty:()=>!state.rows.some(rowHas)&&!liveEvents().length&&!liveWorks().length, name:()=>"検査日報_"+state.equip.replace(/[\\/:*?"<>|（）() ]/g,"")+"_"+state.date.replace(/-/g,"")+".xlsx"};
 // ---- 自動Excel出力（URL末尾に ?export=開始日..終了日 を付けて開くと、その期間の日報Excelを作って画面に埋め込む）----
 (async function(){
   const m=/[?&]export=([^&#]*)/.exec(location.search); if(!m) return;
@@ -986,7 +986,10 @@ const EXP={master:()=>Sync.loadMaster(true), load:(d,q)=>load(d,q), empty:()=>!s
       try{ EXP.load(x.date,x.equip); await Sync.pull();
         const sb=document.getElementById("syncStat"); if(sb&&/\berr\b/.test(sb.className)) throw new Error("スプレッドシートから読み込めませんでした");
         if(EXP.empty&&EXP.empty()) continue;
-        res.files.push({date:x.date,name:EXP.name(),b64:await b64(buildXlsx())}); }
+        res.files.push({date:x.date,name:EXP.name(),b64:await b64(buildXlsx())});
+        if(EXP.csv){ const q=v=>{ v=v==null?"":String(v); return /[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+          const txt="\ufeff"+EXP.csv().map(r=>r.map(q).join(",")).join("\r\n")+"\r\n";
+          res.files.push({date:x.date,name:EXP.name().replace(/\.xlsx$/,".csv"),b64:await b64(new Blob([txt]))}); } }
       catch(e){ res.errors.push(x.date+" "+(x.equip||"")+": "+(e.message||e)); } }
   }catch(e){ res.ok=false; res.errors.push(String(e.message||e)); }
   const u8=s=>btoa(unescape(encodeURIComponent(s))), box=document.createElement("div"); box.hidden=true;
