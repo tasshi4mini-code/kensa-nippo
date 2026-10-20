@@ -198,6 +198,13 @@ html,body,button,input,select,textarea,label,.chip{touch-action:manipulation}
 .lotfoot{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .lotsum{font-size:16px}.lotsum b{font-size:26px;color:#3d3a8c}
 @media (max-width:700px){ .g-hin{grid-template-columns:1fr} .lotline{grid-template-columns:1fr} }
+/* v5 ロット別の不良 */
+.lottabs{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 10px}
+.lottabs button{min-width:150px;min-height:56px;border:2px solid #3d3a8c;background:#fff;color:#3d3a8c;font-size:14px;line-height:1.25}
+.lottabs button b{font-size:18px}
+.lottabs button.on{background:#3d3a8c;color:#fff}
+.ltnote{flex-basis:100%}
+.ngsplit{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:15px}.ngsplit .cur{background:#ecebfa;border-radius:6px;padding:0 6px}.ngsplit b{font-size:20px}
 </style>
 <body>
 <header class="top">
@@ -270,8 +277,10 @@ html,body,button,input,select,textarea,label,.chip{touch-action:manipulation}
 
     <div class="sec">
       <div class="t">不良内容 <span class="id">Isi produk cacat</span> <span class="kk">フリョウナイヨウ</span> — <span class="small" style="color:var(--pri)">「＋」を押すたびに1個ふえます / Tekan + untuk menambah</span></div>
+      <div class="lottabs" id="lotTabs" hidden></div>
       <div class="defs" id="defs"></div>
       <div class="ngsum"><div>不良数 <span class="id">Jumlah cacat</span>：<span class="big" id="ngTotal">0</span> 個</div><div>不良率：<b id="ngRate">－</b></div></div>
+      <div class="ngsplit" id="ngSplit" hidden></div>
       <div id="alertBox"></div>
     </div>
 
@@ -430,7 +439,7 @@ function blankRow(){ const d={}; DEFK.forEach(k=>d[k]=""); return {pal:"",st:"",
 function blankState(date,equip){ return {date,equip,confirmBy:"",hu:0,rows:Array.from({length:MINR},blankRow),events:[],works:[]}; }
 function key(){ return APP+":day:"+state.date+"|"+state.equip; }
 function save(){ if(state.equip==="未設定") return; state.updated=new Date().toISOString(); LS.set(key(),state); LS.set(APP+":last",{date:state.date,equip:state.equip}); }
-function normRow(x){ const b=blankRow(), r=Object.assign(b,x||{}); r.d=Object.assign(blankRow().d,(x&&x.d)||{}); r.fix=Object.assign(blankRow().fix,(x&&x.fix)||{}); return r; }
+function normRow(x){ const b=blankRow(), r=Object.assign(b,x||{}); r.d=Object.assign(blankRow().d,(x&&x.d)||{}); r.fix=Object.assign(blankRow().fix,(x&&x.fix)||{}); if(x&&x.d1){ r.d1=Object.assign(blankRow().d,x.d1); r.d2=Object.assign(blankRow().d,x.d2||{}); } return r; }
 function normalize(s){ const b=blankState(s.date,s.equip); s=Object.assign(b,s);
   s.rows=Array.from({length:Math.max(MINR,(s.rows||[]).length)},(_,i)=>normRow((s.rows||[])[i])); ensureRows(s);
   s.events=(s.events||[]).map(e=>Object.assign({id:uid(),u:1,start:"",end:"",person:"",content:"",action:""},e));
@@ -443,6 +452,15 @@ function ensureRows(s){ s=s||state; let add=false; while(rowHas(s.rows[s.rows.le
 function lotFromDate(v){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||""); return m?`${LOTP}${m[1].slice(2)}-${+m[2]}-${+m[3]}`:""; }
 function dateFromLot(l){ const m=/(\d{2})-(\d{1,2})-(\d{1,2})/.exec(l||""); return m?`20${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`:""; }
 function lotInit(r){ if(r.lot1==null){ r.lot1=r.lot||""; r.lot2=""; r.t1=r.total||""; r.t2=""; } }
+// ---- ロットごとの不良 ----
+let curLot=1;
+function blankD(){ const d={}; DEFK.forEach(k=>d[k]=""); return d; }
+function twoLots(r){ lotInit(r); return !!(r.lot2||r.show2); }
+function ensureLotD(r){ if(!twoLots(r)) return; if(!r.d1){ r.d1=Object.assign(blankD(),r.d); r.d2=blankD(); } }
+function sumD(r){ if(!r.d1) return; DEFK.forEach(k=>{ const v=(num(r.d1[k])||0)+(num((r.d2||{})[k])||0); r.d[k]=v?String(v):""; }); }
+function curD(r){ ensureLotD(r); return (twoLots(r)&&r.d1)?r["d"+curLot]:r.d; }
+function ngD(d){ return DEFK.reduce((a,k)=>a+(num((d||{})[k])||0),0); }
+function rateD(d,t){ const n=ngD(d), x=num(t); return x?Math.round(n/x*10000)/100:null; }
 function syncLot(r){ lotInit(r); if(r.lot2){ r.lot=`${r.lot1}(${r.t1||0})・${r.lot2}(${r.t2||0})`; const a=num(r.t1), b=num(r.t2); r.total=(a==null&&b==null)?"":String((a||0)+(b||0)); } else { r.lot=r.lot1; r.total=r.t1; } }
 function liveEvents(){ return state.events.filter(e=>!e.del); }
 function liveWorks(){ return state.works.filter(w=>!w.del); }
@@ -470,13 +488,18 @@ function renderHeader(){ $("date").value=state.date; renderEquipSel(); $("inspNa
 function renderMasterStat(){ const n=MIDX.length, at=MASTER.at?new Date(MASTER.at):null;
   const t=n?`品番マスター：${n}件` + (at?`（${at.getMonth()+1}/${at.getDate()} ${at.getHours()}:${String(at.getMinutes()).padStart(2,"0")} 読込）`:"") : "品番マスターが未登録です（設定 → マスターをExcelから更新）";
   $("masterStat").textContent=t; $("masterStat").style.color=n?"":"#c62828"; if($("masterInfo")) $("masterInfo").textContent=t; }
-function renderDefs(){ const r=state.rows[sel];
-  $("defs").innerHTML=DEFS.map(([k,jp,id,kk])=>{ const v=r.d[k]||""; return `<div class="def ${k==="ware"?"ware":""} ${num(v)?"has":""}" data-d="${k}">
+function renderLotTabs(){ const r=state.rows[sel], two=twoLots(r); $("lotTabs").hidden=!two; if(!two){ curLot=1; return; }
+  $("lotTabs").innerHTML=[1,2].map(n=>`<button data-lt-tab="${n}" class="${curLot===n?"on":""}">ロット${n}<br><b>${esc(r["lot"+n]||"（日付なし）")}</b></button>`).join("")+`<div class="small ltnote">押したほうのロットに数が入ります / Pilih lot</div>`; }
+function renderDefs(){ const r=state.rows[sel]; renderLotTabs(); const D=curD(r);
+  $("defs").innerHTML=DEFS.map(([k,jp,id,kk])=>{ const v=D[k]||""; return `<div class="def ${k==="ware"?"ware":""} ${num(v)?"has":""}" data-d="${k}">
     <div class="nm">${jp}<br><span class="id">${id}</span> <span class="kk">${kk}</span></div>
     <button data-dm="${k}" aria-label="減らす">−</button><input data-dv="${k}" inputmode="numeric" value="${esc(v)}" placeholder="0"><button data-dp="${k}" aria-label="増やす">＋</button></div>`; }).join(""); }
 function updateNg(){ const r=state.rows[sel], n=ngOf(r), x=rateOf(r);
   $("ngTotal").textContent=n; $("ngTotal").className="big"+(n?" bad":""); $("ngRate").textContent=x==null?"－":(Math.round(x*100)/100)+"%";
-  document.querySelectorAll("#defs .def").forEach(el=>el.classList.toggle("has",!!num(r.d[el.dataset.d])));
+  const D=curD(r); document.querySelectorAll("#defs .def").forEach(el=>el.classList.toggle("has",!!num(D[el.dataset.d])));
+  if(twoLots(r)&&r.d1){ const a=ngD(r.d1), b=ngD(r.d2), ra=rateD(r.d1,r.t1), rb=rateD(r.d2,r.t2);
+    $("ngSplit").hidden=false; $("ngSplit").innerHTML=`<span class="${curLot===1?"cur":""}">ロット1：<b>${a}</b>個（${ra==null?"－":ra+"%"}）</span><span class="${curLot===2?"cur":""}">ロット2：<b>${b}</b>個（${rb==null?"－":rb+"%"}）</span><span>合計：<b>${n}</b>個（${x==null?"－":(Math.round(x*100)/100)+"%"}）</span>`; }
+  else $("ngSplit").hidden=true;
   const al=[]; if((num(r.d.ware)||0)>0) al.push("⚠ 割れを発見しました。速やかに鋳造課長又は品質管理へ連絡してください。<br><span style='font-weight:normal'>Ditemukan retak (WARE). Segera hubungi manajer pengecoran atau kontrol kualitas.</span>");
   if(RATE_WARN!=null&&x!=null&&x>=RATE_WARN) al.push(`⚠ 不良率が ${Math.round(x*100)/100}% です（基準 ${RATE_WARN}%）。いつもより多い場合は連絡してください。`);
   if(r.pal==="NG") al.push("⚠ パレット内に残品があります。<br><span style='font-weight:normal'>Ada barang tersisa di palet.</span>");
@@ -495,7 +518,7 @@ function renderLots(){ const r=state.rows[sel]; lotInit(r); const two=!!r.lot2||
   document.querySelector('.lotline[data-l="2"]').hidden=!two; $("btnLot2").hidden=two||VIEW;
   document.querySelector('.lotline[data-l="1"] .lbt').innerHTML=two?'ロット1の総数 <span class="id">Jumlah lot 1</span>':'総数 <span class="id">Jumlah total</span>';
   const p=prevLot(sel), pb=document.querySelector('[data-lotprev="1"]'); pb.hidden=VIEW||!p||!!r.lot1; pb.textContent=`前回と同じ ${p}`; pb.dataset.v=p;
-  $("lotSum").innerHTML=two?`合計の総数 <span class="id">Total</span>：<b>${esc(r.total||"0")}</b>`:""; }
+  $("lotSum").innerHTML=two?`合計の総数 <span class="id">Total</span>：<b>${esc(r.total||"0")}</b>`:""; renderLotTabs(); }
 function updateMarks(){ const r=state.rows[sel];
   document.querySelectorAll("#palBtns button").forEach(b=>b.className=r.pal===b.dataset.v?(b.dataset.v==="OK"?"on-ok":"on-ng"):"");
   document.querySelectorAll("#freqBtns button").forEach(b=>b.className=r.freq===b.dataset.v?"on-sel":"");
@@ -541,7 +564,7 @@ function askConfirm(msg){ return new Promise(res=>{ const d=$("dlgConfirm"); $("
   const done=v=>{ $("cfYes").onclick=$("cfNo").onclick=null; d.onclose=null; if(d.open) d.close(); res(v); };
   $("cfYes").onclick=()=>done(true); $("cfNo").onclick=()=>done(false); d.onclose=()=>done(false); d.showModal(); }); }
 function nowHM(){ const d=new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
-function selectRow(i){ hideSugg(); sel=(i+NR())%NR(); renderChips(); renderEntry(); renderTable(); }
+function selectRow(i){ hideSugg(); curLot=1; sel=(i+NR())%NR(); renderChips(); renderEntry(); renderTable(); }
 function touchRow(i){ if(VIEW) return; state.rows[i].u=Date.now(); if(needInsp()) return; if(ensureRows()) setTimeout(renderChips,0); save(); Sync.queue("row",i); }
 function touchHeader(){ if(VIEW) return; state.hu=Date.now(); if(needInsp()) return; save(); Sync.queue("header",""); }
 
@@ -578,17 +601,18 @@ document.querySelectorAll("[data-lotv]").forEach(b=>b.addEventListener("click",(
 document.querySelectorAll("[data-lt]").forEach(inp=>inp.addEventListener("input",()=>{ if(VIEW) return; const n=inp.dataset.lt, r=state.rows[sel]; lotInit(r); r["t"+n]=inp.value.trim(); syncLot(r);
   if(r.total&&!r.st){ r.st=nowHM(); document.querySelector('#entryCard input[data-k="st"]').value=r.st; } touchRow(sel); refreshLight(); $("lotSum").innerHTML=r.lot2||r.show2?`合計の総数 <span class="id">Total</span>：<b>${esc(r.total||"0")}</b>`:""; }));
 document.querySelector('[data-lotprev="1"]').addEventListener("click",e=>{ e.preventDefault(); if(VIEW) return; const r=state.rows[sel]; lotInit(r); r.lot1=e.currentTarget.dataset.v; syncLot(r); touchRow(sel); renderLots(); refreshLight(); });
-$("btnLot2").onclick=e=>{ e.preventDefault(); if(VIEW) return; const r=state.rows[sel]; lotInit(r); r.show2=true; renderLots(); toast("ロット2の日付と総数を入れてください"); };
-document.querySelector('[data-lotdel="2"]').addEventListener("click",async e=>{ e.preventDefault(); if(VIEW) return; const r=state.rows[sel]; if(r.lot2&&!await askConfirm("ロット2を消しますか？")) return; r.lot2=""; r.t2=""; r.show2=false; syncLot(r); touchRow(sel); renderLots(); refreshLight(); });
+$("btnLot2").onclick=e=>{ e.preventDefault(); if(VIEW) return; const r=state.rows[sel]; lotInit(r); r.show2=true; ensureLotD(r); renderLots(); renderDefs(); updateNg(); toast("ロット2の日付と総数を入れてください"); };
+document.querySelector('[data-lotdel="2"]').addEventListener("click",async e=>{ e.preventDefault(); if(VIEW) return; const r=state.rows[sel]; if((r.lot2||ngD(r.d2))&&!await askConfirm("ロット2を消しますか？（ロット2の不良の数も消えます）")) return; r.lot2=""; r.t2=""; r.show2=false; if(r.d1){ r.d=Object.assign(blankD(),r.d1); delete r.d1; delete r.d2; } curLot=1; syncLot(r); renderDefs(); touchRow(sel); renderLots(); refreshLight(); });
 document.querySelectorAll("[data-now]").forEach(b=>b.addEventListener("click",e=>{ e.preventDefault(); if(VIEW) return; const k=b.dataset.now; state.rows[sel][k]=nowHM(); document.querySelector(`#entryCard input[data-k="${k}"]`).value=state.rows[sel][k]; touchRow(sel); refreshLight(); }));
 $("palBtns").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b||VIEW) return; const r=state.rows[sel]; r.pal=r.pal===b.dataset.v?"":b.dataset.v; if(r.pal&&!r.st){ r.st=nowHM(); document.querySelector('#entryCard input[data-k="st"]').value=r.st; } touchRow(sel); refreshLight(); });
 $("freqBtns").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b||VIEW) return; const r=state.rows[sel]; r.freq=r.freq===b.dataset.v?"":b.dataset.v; touchRow(sel); refreshLight(); });
 $("fixBtns").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b||VIEW) return; const r=state.rows[sel]; r.fix[b.dataset.v]=!r.fix[b.dataset.v]; touchRow(sel); refreshLight(); });
-$("defs").addEventListener("click",e=>{ if(VIEW) return; const p=e.target.closest("[data-dp]"), m=e.target.closest("[data-dm]"); if(!p&&!m) return; const k=(p||m).dataset[p?"dp":"dm"], r=state.rows[sel];
-  const v=Math.max(0,(num(r.d[k])||0)+(p?1:-1)); r.d[k]=v?String(v):""; document.querySelector(`#defs input[data-dv="${k}"]`).value=r.d[k];
+$("defs").addEventListener("click",e=>{ if(VIEW) return; const p=e.target.closest("[data-dp]"), m=e.target.closest("[data-dm]"); if(!p&&!m) return; const k=(p||m).dataset[p?"dp":"dm"], r=state.rows[sel], D=curD(r);
+  const v=Math.max(0,(num(D[k])||0)+(p?1:-1)); D[k]=v?String(v):""; sumD(r); document.querySelector(`#defs input[data-dv="${k}"]`).value=D[k];
   if(p&&k==="ware"&&v===1) toast("割れを発見したら、すぐに鋳造課長又は品質管理へ連絡してください");
   touchRow(sel); refreshLight(); });
-$("defs").addEventListener("input",e=>{ if(VIEW) return; const k=e.target.dataset.dv; if(!k) return; const r=state.rows[sel], v=num(e.target.value); r.d[k]=v&&v>0?String(Math.round(v)):""; touchRow(sel); refreshLight(); });
+$("defs").addEventListener("input",e=>{ if(VIEW) return; const k=e.target.dataset.dv; if(!k) return; const r=state.rows[sel], D=curD(r), v=num(e.target.value); D[k]=v&&v>0?String(Math.round(v)):""; sumD(r); touchRow(sel); refreshLight(); });
+$("lotTabs").addEventListener("click",e=>{ const b=e.target.closest("[data-lt-tab]"); if(!b) return; curLot=+b.dataset.ltTab; renderDefs(); updateNg(); });
 $("btnClearRow").onclick=async()=>{ if(VIEW) return; if(await askConfirm(`検査 ${sel+1} の入力内容をクリアしますか?`)){ state.rows[sel]=blankRow(); state.rows[sel].u=Date.now(); save(); Sync.queue("row",sel); renderAll(); } };
 $("btnNext").onclick=()=>{ selectRow(sel+1); window.scrollTo({top:$("entryCard").offsetTop-70,behavior:"smooth"}); };
 $("btnPrev").onclick=()=>selectRow(sel-1);
@@ -742,10 +766,12 @@ function workbook(sheets){
 
 
 // ---- Excel ----
-const DATA_HEAD=["検査日","作業者","No","パレット内残品","検査開始","検査終了","ロット","品番","品名","マスター登録","総数",...DEFS.map(d=>d[1]),"不良数","不良率(%)","修正頻度","○(鋳コブ/バリ/焼き付き)","備考","記録確認","ロット1","ロット1総数","ロット2","ロット2総数"];
+const DATA_HEAD=["検査日","作業者","No","パレット内残品","検査開始","検査終了","ロット","品番","品名","マスター登録","総数",...DEFS.map(d=>d[1]),"不良数","不良率(%)","修正頻度","○(鋳コブ/バリ/焼き付き)","備考","記録確認","ロット区分"];
 function dataRows(){ const out=[DATA_HEAD];
   state.rows.forEach((r,i)=>{ if(!rowHas(r)) return; const x=rateOf(r);
-    out.push([state.date,state.equip,i+1,r.pal,r.st,r.en,r.lot,r.hin,r.name,r.hin?(r.ok?"○":"×"):"",r.total,...DEFK.map(k=>r.d[k]),ngOf(r)||"",x==null?"":Math.round(x*100)/100,r.freq,fixTxt(r),r.note,state.confirmBy,...(()=>{ lotInit(r); return [r.lot1,r.lot2?r.t1:r.total,r.lot2,r.lot2?r.t2:""]; })()]); });
+    lotInit(r); const base=(lot,t,d,n,rt,lk)=>[state.date,state.equip,i+1,r.pal,r.st,r.en,lot,r.hin,r.name,r.hin?(r.ok?"○":"×"):"",t,...DEFK.map(k=>d[k]),n||"",rt==null?"":rt,r.freq,fixTxt(r),r.note,state.confirmBy,lk];
+    if(r.lot2){ const d1=r.d1||r.d, d2=r.d2||{}; out.push(base(r.lot1,r.t1,d1,ngD(d1),rateD(d1,r.t1),"1")); out.push(base(r.lot2,r.t2,Object.assign(blankD(),d2),ngD(d2),rateD(d2,r.t2),"2")); }
+    else out.push(base(r.lot,r.total,r.d,ngOf(r),x==null?null:Math.round(x*100)/100,"")); });
   return out; }
 function workRows(){ const out=[["検査日","作業者","No","開始","終了","ほかの作業","ほかの工程","テスト","メモ"]]; liveWorks().forEach((w,i)=>out.push([state.date,state.equip,i+1,w.start,w.end,w.work,w.proc,w.test?"○":"",w.memo])); return out; }
 function eventRows(){ const out=[["検査日","作業者","No","発生時間","終了時間","担当","異常/変化点内容","処置内容"]]; liveEvents().forEach((e,i)=>out.push([state.date,state.equip,i+1,e.start,e.end,e.person,e.content,e.action])); return out; }
@@ -776,7 +802,7 @@ function buildNippoSheet(){
 }
 function tableSheet(name,rows,widths){ const S=new Sheet(name); S.freeze=1; S.cols=widths; const H=st({font:1,fill:"head",border:1,h:"center",wrap:true});
   rows.forEach((row,r)=>row.forEach((v,c)=>S.set(c,r,v,r===0?H:st({border:1})))); S.autoFilter="A1:"+ref(rows[0].length-1,Math.max(rows.length-1,0)); S.heights[0]=32; return S; }
-function buildXlsx(){ return workbook([buildNippoSheet(), tableSheet("データ",dataRows(),[11,10,5,8,8,8,12,16,8,8,7,...DEFK.map(()=>7),7,8,8,14,24,10,11,8,11,8]), tableSheet("その他作業",workRows(),[11,10,5,8,8,10,10,7,30]), tableSheet("異常変化点",eventRows(),[11,10,5,9,9,10,50,50])]); }
+function buildXlsx(){ return workbook([buildNippoSheet(), tableSheet("データ",dataRows(),[11,10,5,8,8,8,12,16,8,8,7,...DEFK.map(()=>7),7,8,8,14,24,10,8]), tableSheet("その他作業",workRows(),[11,10,5,8,8,10,10,7,30]), tableSheet("異常変化点",eventRows(),[11,10,5,9,9,10,50,50])]); }
 $("btnCsv").onclick=async()=>{
   if(!state.rows.some(rowHas)&&!liveEvents().length&&!liveWorks().length){ toast("入力データがありません"); return; }
   await Sync.flush();
