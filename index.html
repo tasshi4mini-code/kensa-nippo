@@ -773,6 +773,12 @@ function dataRows(){ const out=[DATA_HEAD];
     if(r.lot2){ const d1=r.d1||r.d, d2=r.d2||{}; out.push(base(r.lot1,r.t1,d1,ngD(d1),rateD(d1,r.t1),"1")); out.push(base(r.lot2,r.t2,Object.assign(blankD(),d2),ngD(d2),rateD(d2,r.t2),"2")); }
     else out.push(base(r.lot,r.total,r.d,ngOf(r),x==null?null:Math.round(x*100)/100,"")); });
   return out; }
+// CSV（必要な項目だけ）：1行＝1記録。不良はロットの合計、ロットごとの総数は右の4列
+function csvRows(){ const out=[["検査日","作業者","ロット","品番","品名","総数",...DEFS.map(d=>d[1]),"ロット1","ロット1総数","ロット2","ロット2総数"]];
+  state.rows.forEach(r=>{ if(!rowHas(r)) return; lotInit(r); syncLot(r);
+    const d=r.lot2?(()=>{ const s=blankD(), a=r.d1||r.d||{}, b=r.d2||{}; DEFK.forEach(k=>{ const x=(num(a[k])||0)+(num(b[k])||0); s[k]=x?String(x):""; }); return s; })():r.d;
+    out.push([state.date,state.equip,r.lot,r.hin,r.name,r.total,...DEFK.map(k=>d[k]),r.lot1,r.t1,r.lot2,r.lot2?r.t2:""]); });
+  return out; }
 function workRows(){ const out=[["検査日","作業者","No","開始","終了","ほかの作業","ほかの工程","テスト","メモ"]]; liveWorks().forEach((w,i)=>out.push([state.date,state.equip,i+1,w.start,w.end,w.work,w.proc,w.test?"○":"",w.memo])); return out; }
 function eventRows(){ const out=[["検査日","作業者","No","発生時間","終了時間","担当","異常/変化点内容","処置内容"]]; liveEvents().forEach((e,i)=>out.push([state.date,state.equip,i+1,e.start,e.end,e.person,e.content,e.action])); return out; }
 function buildNippoSheet(){
@@ -991,7 +997,7 @@ renderAll();
 if(VIEW){ $("viewBadge").hidden=false; document.title="検査日報（閲覧用）"; document.querySelectorAll("#entryCard input,#entryCard textarea,.card input").forEach(el=>el.readOnly=true); }
 if(!VIEW&&!inspList().length) setTimeout(()=>toast("「設定」→「検査員の名前」で5人の名前を登録してください"),800);
 Sync.status(); Sync.flush().then(()=>Sync.pull()); Sync.loadMaster(false);
-const EXP={csv:()=>dataRows(), master:()=>Sync.loadMaster(true), load:(d,q)=>load(d,q), empty:()=>!state.rows.some(rowHas)&&!liveEvents().length&&!liveWorks().length, name:()=>"検査日報_"+state.equip.replace(/[\\/:*?"<>|（）() ]/g,"")+"_"+state.date.replace(/-/g,"")+".xlsx"};
+const EXP={csv:()=>csvRows(), master:()=>Sync.loadMaster(true), load:(d,q)=>load(d,q), empty:()=>!state.rows.some(rowHas)&&!liveEvents().length&&!liveWorks().length, name:()=>"検査日報_"+state.equip.replace(/[\\/:*?"<>|（）() ]/g,"")+"_"+state.date.replace(/-/g,"")+".xlsx"};
 // ---- 自動Excel出力（URL末尾に ?export=開始日..終了日 を付けて開くと、その期間の日報Excelを作って画面に埋め込む）----
 (async function(){
   const m=/[?&]export=([^&#]*)/.exec(location.search); if(!m) return;
