@@ -672,10 +672,16 @@ async function renderList(){
   } else { if(on) note="オフラインのため、この端末のデータを表示しています。"; items=localDays().filter(x=>ymOf(x.date)===ym); }
   $("mSel").innerHTML=[...months].sort().reverse().map(m=>`<option value="${m}" ${m===ym?"selected":""}>${m.replace("-","年")}月</option>`).join("");
   items.sort((a,b)=> a.date===b.date ? a.equip.localeCompare(b.equip) : (a.date<b.date?1:-1));
+  // 検査0件で異常/変化点もない日報は、ふだんは出さない（今開いている日報と今日の日報は出す）
+  const isEmpty=it=>!(it.filled||it.events||it.works||it.ng||it.total)&&!(it.date===state.date&&it.equip===state.equip)&&it.date!==todayStr();
+  const hidden=items.filter(isEmpty); if(!showEmpty) items=items.filter(it=>!isEmpty(it));
   const ng=items.reduce((a,b)=>a+(b.ng||0),0);
   $("listSum").textContent=(note?note+" / ":"")+`${items.length}件の日報`+(ng?` ・ 不良 合計 ${ng}個`:"");
-  box.innerHTML=items.length?items.map(dayItem).join(""):'<div class="small" style="padding:12px">この月の日報はありません</div>';
+  box.innerHTML=(items.length?items.map(dayItem).join(""):'<div class="small" style="padding:12px">この月の日報はありません</div>')+
+    (hidden.length?`<div style="text-align:center;padding:10px"><button id="btnShowEmpty" style="min-height:40px;font-size:14px">${showEmpty?"入力なし（検査0件）の日報をかくす":`入力なし（検査0件）の日報も表示（${hidden.length}件）`}</button></div>`:"");
+  const be=$("btnShowEmpty"); if(be) be.onclick=()=>{ showEmpty=!showEmpty; renderList(); };
 }
+let showEmpty=false;
 $("btnList").onclick=()=>{ listYM=ymOf(state.date||todayStr()); $("dlgList").showModal(); renderList(); };
 $("mPrev").onclick=()=>{ listYM=ymShift(listYM,-1); renderList(); };
 $("mNext").onclick=()=>{ listYM=ymShift(listYM,1); renderList(); };
