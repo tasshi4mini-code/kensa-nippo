@@ -598,7 +598,14 @@ document.querySelectorAll("#entryCard [data-k]").forEach(inp=>{ if(inp.dataset.k
   if(inp.dataset.k==="lot") inp.addEventListener("focus",()=>{ const r=state.rows[sel]; if(!r.lot&&!VIEW){ const p=prevLot(sel); if(p){ r.lot=p; inp.value=p; inp.select(); touchRow(sel); refreshLight(); } } });
 });
 // 製品ロット：カレンダー・総数・ロット2
-document.querySelectorAll("[data-lotd]").forEach(inp=>inp.addEventListener("change",()=>{ if(VIEW) return; const n=inp.dataset.lotd, r=state.rows[sel]; lotInit(r); r["lot"+n]=lotFromDate(inp.value); syncLot(r); touchRow(sel); renderLots(); refreshLight(); }));
+// ロットのカレンダー：開いたときの行にだけ入れる。ロット2は「＋ロット2を追加」を押した行だけ（勝手に入らないように）
+document.querySelectorAll("[data-lotd]").forEach(inp=>{ const mark=()=>{ inp._row=sel; };
+  ["pointerdown","focus","click"].forEach(ev=>inp.addEventListener(ev,mark));
+  inp.addEventListener("change",()=>{ if(VIEW) return; const n=inp.dataset.lotd, i=(inp._row!=null?inp._row:sel); inp._row=null;
+    if(i!==sel){ renderLots(); return; }
+    const r=state.rows[i]; lotInit(r);
+    if(n==="2"&&!r.show2&&!r.lot2){ renderLots(); return; }
+    r["lot"+n]=lotFromDate(inp.value); syncLot(r); touchRow(i); renderLots(); refreshLight(); }); });
 document.querySelectorAll("[data-lotv]").forEach(b=>b.addEventListener("click",()=>{ const i=document.querySelector(`[data-lotd="${b.dataset.lotv}"]`); if(VIEW) return; try{ i.showPicker(); }catch(e){ i.focus(); i.click(); } }));
 document.querySelectorAll("[data-lt]").forEach(inp=>inp.addEventListener("input",()=>{ if(VIEW) return; const n=inp.dataset.lt, r=state.rows[sel]; lotInit(r); r["t"+n]=inp.value.trim(); syncLot(r);
   if(r.total&&!r.st){ r.st=nowHM(); document.querySelector('#entryCard input[data-k="st"]').value=r.st; } touchRow(sel); refreshLight(); $("lotSum").innerHTML=r.lot2||r.show2?`合計の総数 <span class="id">Total</span>：<b>${esc(r.total||"0")}</b>`:""; }));
