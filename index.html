@@ -119,6 +119,8 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
   table{min-width:0;font-size:10px}
   @page{size:A4 landscape;margin:8mm}
 }
+/* v11: hidden を付けた欄は必ず隠す（ロットのタブ・ロット2の欄が、ほかの行にも残って見えていたため） */
+[hidden]{display:none!important}
 </style>
 <style>
 header.top{background:#3d3a8c}
@@ -490,7 +492,7 @@ function renderHeader(){ $("date").value=state.date; renderEquipSel(); $("inspNa
 function renderMasterStat(){ const n=MIDX.length, at=MASTER.at?new Date(MASTER.at):null;
   const t=n?`品番マスター：${n}件` + (at?`（${at.getMonth()+1}/${at.getDate()} ${at.getHours()}:${String(at.getMinutes()).padStart(2,"0")} 読込）`:"") : "品番マスターが未登録です（設定 → マスターをExcelから更新）";
   $("masterStat").textContent=t; $("masterStat").style.color=n?"":"#c62828"; if($("masterInfo")) $("masterInfo").textContent=t; }
-function renderLotTabs(){ const r=state.rows[sel], two=twoLots(r); $("lotTabs").hidden=!two; if(!two){ curLot=1; return; }
+function renderLotTabs(){ const r=state.rows[sel], two=twoLots(r); $("lotTabs").hidden=!two; if(!two){ curLot=1; $("lotTabs").innerHTML=""; return; }
   $("lotTabs").innerHTML=[1,2].map(n=>`<button data-lt-tab="${n}" class="${curLot===n?"on":""}">ロット${n}<br><b>${esc(r["lot"+n]||"（日付なし）")}</b></button>`).join("")+`<div class="small ltnote">押したほうのロットに数が入ります / Pilih lot</div>`; }
 function renderDefs(){ const r=state.rows[sel]; renderLotTabs(); const D=curD(r);
   $("defs").innerHTML=DEFS.map(([k,jp,id,kk])=>{ const v=D[k]||""; return `<div class="def ${k==="ware"?"ware":""} ${num(v)?"has":""}" data-d="${k}">
