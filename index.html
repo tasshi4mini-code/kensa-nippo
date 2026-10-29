@@ -457,8 +457,10 @@ let curLot=1;
 function blankD(){ const d={}; DEFK.forEach(k=>d[k]=""); return d; }
 function twoLots(r){ lotInit(r); return !!(r.lot2||r.show2); }
 function ensureLotD(r){ if(!twoLots(r)) return; if(!r.d1){ r.d1=Object.assign(blankD(),r.d); r.d2=blankD(); } }
-function sumD(r){ if(!r.d1) return; DEFK.forEach(k=>{ const v=(num(r.d1[k])||0)+(num((r.d2||{})[k])||0); r.d[k]=v?String(v):""; }); }
-function curD(r){ ensureLotD(r); return (twoLots(r)&&r.d1)?r["d"+curLot]:r.d; }
+// ロット2を使っていないのに「ロットごとの不良」が残っている行を直す（不良の＋−が効かなくなる原因）
+function fixLotD(r){ if(r&&r.d1&&!r.lot2&&!r.show2){ delete r.d1; delete r.d2; return true; } return false; }
+function sumD(r){ fixLotD(r); if(!r.d1) return; DEFK.forEach(k=>{ const v=(num(r.d1[k])||0)+(num((r.d2||{})[k])||0); r.d[k]=v?String(v):""; }); }
+function curD(r){ fixLotD(r); ensureLotD(r); return (twoLots(r)&&r.d1)?r["d"+curLot]:r.d; }
 function ngD(d){ return DEFK.reduce((a,k)=>a+(num((d||{})[k])||0),0); }
 function rateD(d,t){ const n=ngD(d), x=num(t); return x?Math.round(n/x*10000)/100:null; }
 function syncLot(r){ lotInit(r); if(r.lot2){ r.lot=`${r.lot1}(${r.t1||0})・${r.lot2}(${r.t2||0})`; const a=num(r.t1), b=num(r.t2); r.total=(a==null&&b==null)?"":String((a||0)+(b||0)); } else { r.lot=r.lot1; r.total=r.t1; } }
