@@ -121,6 +121,16 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 }
 /* v11: hidden を付けた欄は必ず隠す（ロットのタブ・ロット2の欄が、ほかの行にも残って見えていたため） */
 [hidden]{display:none!important}
+/* v12: ロットの候補・造型数との比較 */
+.lotcand:empty,.loterr:empty{display:none}
+.lotcand{margin-bottom:10px}
+.lotcand .lch{font-size:13px;color:var(--sub);margin-bottom:4px}
+.lotcand .lcg{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px}
+.lotcand button{text-align:left;min-height:54px;border:2px solid #3d3a8c;background:#fff;border-radius:10px;padding:4px 10px;line-height:1.3}
+.lotcand button b{font-size:17px;color:#3d3a8c}.lotcand button small{display:block;font-size:12px;color:#5d6778}
+.lotcand button.on{background:#ecebfa}.lotcand button.full small{color:#b00020;font-weight:bold}
+.loterr{margin-top:8px;padding:10px 12px;border-radius:10px;font-weight:bold;font-size:15px;line-height:1.6}
+.loterr.ng{background:#ffebee;color:#b00020;border:2px solid #d50000}.loterr.warn{background:#fff8e1;color:#7a5a00;border:2px solid #f9a825}.loterr.ok{background:#e8f5e9;color:#1b5e20;border:1px solid #a5d6a7;font-weight:normal}
 </style>
 <style>
 header.top{background:#3d3a8c}
@@ -267,6 +277,7 @@ html,body,button,input,select,textarea,label,.chip{touch-action:manipulation}
         <label class="f">品名 <span class="id">Nama produk</span> <span class="kk">ヒンメイ</span><input data-k="name"></label>
       </div>
       <div class="lots" id="lotBox">
+        <div class="lotcand" id="lotCand"></div>
         <div class="lotline" data-l="1"><div class="lotp"><span class="small">製品ロット1 <span class="id">Lot 1</span> <span class="kk">ロット</span></span>
           <div class="lotpick"><input type="date" data-lotd="1" aria-label="ロット1の日付"><b class="lotv" data-lotv="1">－</b></div><button class="lprev" data-lotprev="1" hidden></button></div>
           <label class="f lt"><span class="lbt">総数 <span class="id">Jumlah total</span></span><input data-lt="1" inputmode="numeric"></label></div>
@@ -274,6 +285,7 @@ html,body,button,input,select,textarea,label,.chip{touch-action:manipulation}
           <div class="lotpick"><input type="date" data-lotd="2" aria-label="ロット2の日付"><b class="lotv" data-lotv="2">－</b></div><button class="lprev" data-lotdel="2">ロット2を消す</button></div>
           <label class="f lt">ロット2の総数 <span class="id">Jumlah lot 2</span><input data-lt="2" inputmode="numeric"></label></div>
         <div class="lotfoot"><button id="btnLot2">＋ ロット2を追加 <span class="id">Tambah lot 2</span></button><div id="lotSum" class="lotsum"></div></div>
+        <div class="loterr" id="lotErr"></div>
       </div>
     </div>
 
@@ -522,6 +534,7 @@ function renderLots(){ const r=state.rows[sel]; lotInit(r); const two=!!r.lot2||
   document.querySelector('.lotline[data-l="2"]').hidden=!two; $("btnLot2").hidden=two||VIEW;
   document.querySelector('.lotline[data-l="1"] .lbt').innerHTML=two?'ロット1の総数 <span class="id">Jumlah lot 1</span>':'総数 <span class="id">Jumlah total</span>';
   const p=prevLot(sel), pb=document.querySelector('[data-lotprev="1"]'); pb.hidden=VIEW||!p||!!r.lot1; pb.textContent=`前回と同じ ${p}`; pb.dataset.v=p;
+  if(typeof LotHelp!=="undefined"&&LotHelp) LotHelp.render();
   $("lotSum").innerHTML=two?`合計の総数 <span class="id">Total</span>：<b>${esc(r.total||"0")}</b>`:""; renderLotTabs(); }
 function updateMarks(){ const r=state.rows[sel];
   document.querySelectorAll("#palBtns button").forEach(b=>b.className=r.pal===b.dataset.v?(b.dataset.v==="OK"?"on-ok":"on-ng"):"");
@@ -610,7 +623,7 @@ document.querySelectorAll("[data-lotd]").forEach(inp=>{ const mark=()=>{ inp._ro
     r["lot"+n]=lotFromDate(inp.value); syncLot(r); touchRow(i); renderLots(); refreshLight(); }); });
 document.querySelectorAll("[data-lotv]").forEach(b=>b.addEventListener("click",()=>{ const i=document.querySelector(`[data-lotd="${b.dataset.lotv}"]`); if(VIEW) return; try{ i.showPicker(); }catch(e){ i.focus(); i.click(); } }));
 document.querySelectorAll("[data-lt]").forEach(inp=>inp.addEventListener("input",()=>{ if(VIEW) return; const n=inp.dataset.lt, r=state.rows[sel]; lotInit(r); r["t"+n]=inp.value.trim(); syncLot(r);
-  if(r.total&&!r.st){ r.st=nowHM(); document.querySelector('#entryCard input[data-k="st"]').value=r.st; } touchRow(sel); refreshLight(); $("lotSum").innerHTML=r.lot2||r.show2?`合計の総数 <span class="id">Total</span>：<b>${esc(r.total||"0")}</b>`:""; }));
+  if(r.total&&!r.st){ r.st=nowHM(); document.querySelector('#entryCard input[data-k="st"]').value=r.st; } touchRow(sel); refreshLight(); $("lotSum").innerHTML=r.lot2||r.show2?`合計の総数 <span class="id">Total</span>：<b>${esc(r.total||"0")}</b>`:""; if(LotHelp) LotHelp.render(); }));
 document.querySelector('[data-lotprev="1"]').addEventListener("click",e=>{ e.preventDefault(); if(VIEW) return; const r=state.rows[sel]; lotInit(r); r.lot1=e.currentTarget.dataset.v; syncLot(r); touchRow(sel); renderLots(); refreshLight(); });
 $("btnLot2").onclick=e=>{ e.preventDefault(); if(VIEW) return; const r=state.rows[sel]; lotInit(r); r.show2=true; ensureLotD(r); renderLots(); renderDefs(); updateNg(); toast("ロット2の日付と総数を入れてください"); };
 document.querySelector('[data-lotdel="2"]').addEventListener("click",async e=>{ e.preventDefault(); if(VIEW) return; const r=state.rows[sel]; if((r.lot2||ngD(r.d2))&&!await askConfirm("ロット2を消しますか？（ロット2の不良の数も消えます）")) return; r.lot2=""; r.t2=""; r.show2=false; if(r.d1){ r.d=Object.assign(blankD(),r.d1); delete r.d1; delete r.d2; } curLot=1; syncLot(r); renderDefs(); touchRow(sel); renderLots(); refreshLight(); });
@@ -857,6 +870,72 @@ async function writeFile(name,blob){
 }
 
 // ---- スプレッドシート同期 ----
+
+// ---- v12：品番を入れたら最近のロット（造型日報）を3つ出す／検査数が造型数を超えたらエラー ----
+var LotHelp=(function(){
+  const NLOT=3, DEEP=120, LS2=APP+":zkp";
+  let zc=null, zcBusy=null;
+  async function zcfg(){ if(zc) return zc; if(zcBusy) return zcBusy;
+    zcBusy=(async()=>{ if(CFG.zokeiUrl) return (zc={url:CFG.zokeiUrl,token:CFG.zokeiToken||""});
+      try{ const t=await (await fetch("/zokei-nippo/config.js",{cache:"no-store"})).text(); const w={}; new Function("window",t)(w); const c=w.SUNA_CONFIG||{}; if(c.syncUrl) zc={url:c.syncUrl,token:c.token||""}; }catch(e){}
+      return zc; })(); return zcBusy; }
+  const ymdL=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  const shift=(d,n)=>{ const x=new Date(d+"T00:00:00"); x.setDate(x.getDate()+n); return ymdL(x); };
+  const md=d=>{ const [,m,dd]=d.split("-"); return `${+m}/${+dd}`; };
+  async function getJ(base,params){ const u=base+(base.includes("?")?"&":"?")+new URLSearchParams(params); const j=await (await fetch(u,{redirect:"follow"})).json(); if(!j.ok) throw new Error(j.error||"error"); return j; }
+  // 造型：日ごとの品番別の生産個数（過去の日はこの端末に覚えておく）
+  let ZP=LS.get(LS2,{}), zList={}, zBusy={};
+  async function zMonth(m){ const c=await zcfg(); if(!c) throw new Error("造型日報の場所がわかりません");
+    const old=zList[m]; if(old&&Date.now()-old.at<5*60*1000) return old.days; const j=await getJ(c.url,{action:"list",token:c.token,month:m}); zList[m]={at:Date.now(),days:j.days||[]}; return zList[m].days; }
+  async function zDay(d){ const fixed=d<shift(ymdL(new Date()),-2); if(ZP[d]&&(fixed||Date.now()-(ZP[d]._at||0)<5*60*1000)) return ZP[d];
+    if(zBusy[d]) return zBusy[d];
+    zBusy[d]=(async()=>{ const c=await zcfg(); const L=(await zMonth(d.slice(0,7))).filter(x=>x.date===d), o={_at:Date.now()};
+      for(const x of L){ const j=await getJ(c.url,{action:"load",token:c.token,date:d,equip:x.equip||""});
+        (j.items||[]).forEach(it=>{ if(it.type!=="row") return; const r=it.raw||{}; (r.items||[]).forEach((v,k)=>{ if(!v||!v.hin||v.test) return; const q=num((r.qtyOut||[])[k]); const n=normHin(v.hin); o[n]=(o[n]||0)+(q||0); }); }); }
+      ZP[d]=o; const lim=shift(ymdL(new Date()),-DEEP-5); Object.keys(ZP).forEach(k=>{ if(k<lim) delete ZP[k]; }); LS.set(LS2,ZP); zBusy[d]=null; return o; })();
+    try{ return await zBusy[d]; }catch(e){ zBusy[d]=null; throw e; } }
+  // 品番の最近のロット（新しい順に3つ）
+  const lotsCache={};
+  async function lotsOf(n){ const lc=lotsCache[n]; if(lc&&Date.now()-lc.at<5*60*1000) return lc.list;
+    const out=[]; const stop=shift(ymdL(new Date()),-DEEP);
+    for(let d=ymdL(new Date());d>=stop&&out.length<NLOT;d=shift(d,-1)){ const days=new Set((await zMonth(d.slice(0,7))).map(x=>x.date)); if(!days.has(d)) continue; const o=await zDay(d); if(o[n]) out.push({d,qty:o[n]}); }
+    lotsCache[n]={at:Date.now(),list:out}; return out; }
+  // 検査：品番・ロットごとの検査数の合計（この画面の日報はこの端末の入力を使う）
+  let kList={}, kDay={};
+  async function kMonth(m){ const o=kList[m]; if(o&&Date.now()-o.at<3*60*1000) return o.days; const j=await Sync.list(m); kList[m]={at:Date.now(),days:j.days||[]}; return kList[m].days; }
+  async function kLoad(d,e){ const k=d+"|"+e, o=kDay[k]; if(o&&Date.now()-o.at<3*60*1000) return o.rows; const c=Sync.getCfg();
+    const j=await getJ(c.syncUrl,{action:"load",token:c.token,date:d,equip:e}); const rows=[]; (j.items||[]).forEach(it=>{ if(it.type==="row") rows[+it.ref]=it.raw||{}; }); kDay[k]={at:Date.now(),rows}; return rows; }
+  function rowLots(r){ lotInit(r); const L=[]; if(r.lot2){ if(r.lot1) L.push([r.lot1,num(r.t1)]); L.push([r.lot2,num(r.t2)]); } else if(r.lot1) L.push([r.lot1,num(r.total)]); return L; }
+  async function inspected(n,ld,skipSel){ let sum=0; const today=ymdL(new Date()), months=[]; { let [y,m]=ld.slice(0,7).split("-").map(Number); const end=today.slice(0,7); for(let k=0;k<24;k++){ const mm=`${y}-${String(m).padStart(2,"0")}`; months.push(mm); if(mm>=end) break; m++; if(m>12){ m=1; y++; } } }
+    for(const m of months){ for(const x of (await kMonth(m))){ if(x.date<ld) continue; if(x.date===state.date&&x.equip===state.equip) continue;
+        (await kLoad(x.date,x.equip)).forEach(r=>{ if(!r||normHin(r.hin)!==n) return; rowLots(r).forEach(([l,q])=>{ if(dateFromLot(l)===ld) sum+=q||0; }); }); } }
+    state.rows.forEach((r,i)=>{ if(i===skipSel||!r||normHin(r.hin)!==n) return; rowLots(r).forEach(([l,q])=>{ if(dateFromLot(l)===ld) sum+=q||0; }); });
+    return sum; }
+  let seq=0; const ngShown=new WeakMap();
+  async function render(){ const my=++seq, r=state.rows[sel], cand=$("lotCand"), err=$("lotErr"); if(!cand||!err) return;
+    const n=normHin(r&&r.hin); if(!n||!Sync.on()){ cand.innerHTML=""; err.innerHTML=""; err.className="loterr"; return; }
+    if(!cand.dataset.n||cand.dataset.n!==n){ cand.innerHTML=`<div class="lch">この品番の最近のロット（造型日報）を探しています…</div>`; cand.dataset.n=n; }
+    try{ const L=await lotsOf(n); if(my!==seq) return; const items=[];
+      for(const x of L){ const ins=await inspected(n,x.d,-1); if(my!==seq) return; items.push(Object.assign({ins},x)); }
+      lotInit(r); const cur=[r.lot1,r.lot2].filter(Boolean);
+      cand.innerHTML=L.length?`<div class="lch">この品番の最近のロット（造型日報・新しい順）タップでロットに入ります / Lot terbaru</div><div class="lcg">`+items.map(x=>{ const lot=lotFromDate(x.d), rest=x.qty-x.ins;
+          return `<button data-cl="${x.d}" class="${cur.includes(lot)?"on":""} ${rest<=0?"full":""}" ${VIEW?"disabled":""}><b>${esc(lot)}</b><small>${md(x.d)} 造型 ${x.qty}個 ／ 検査済み ${x.ins}個${rest>0?`（残り ${rest}個）`:"（検査ずみ）"}</small></button>`; }).join("")+`</div>`
+        :`<div class="lch" style="color:#b00020">直近${DEEP}日の造型日報にこの品番がありません。現品票のロットを確認してください</div>`;
+      // 造型数と検査数
+      const msgs=[]; let lv="ok";
+      for(const [l,q] of rowLots(r)){ const ld=dateFromLot(l); if(!ld) continue; const o=await zDay(ld); if(my!==seq) return; const made=o[n]||0;
+        if(!made){ msgs.push(`⚠ ロット ${esc(l)}（${md(ld)}）にこの品番の造型の記録がありません。ロットを確認してください`); if(lv!=="ng") lv="warn"; continue; }
+        const others=await inspected(n,ld,sel); if(my!==seq) return; const tot=others+(q||0);
+        if(tot>made){ msgs.push(`⚠ 検査数が造型数を超えています：ロット ${esc(l)}　造型 ${made}個 ／ 検査 ${tot}個（この検査 ${q||0}個を含む・${tot-made}個多い）`); lv="ng"; }
+        else msgs.push(`ロット ${esc(l)}：造型 ${made}個 ／ 検査 ${tot}個（残り ${made-tot}個）`); }
+      err.className="loterr "+(msgs.length?lv:""); err.innerHTML=msgs.join("<br>");
+      if(lv==="ng"&&ngShown.get(r)!==err.innerHTML){ ngShown.set(r,err.innerHTML); toast("⚠ 検査数が造型数を超えています。ロットと総数を確認してください"); }
+    }catch(e){ if(my!==seq) return; cand.innerHTML=`<div class="lch">ロットの候補を読み込めませんでした（${esc(e.message||e)}）</div>`; } }
+  $("lotCand").addEventListener("click",e=>{ const b=e.target.closest("[data-cl]"); if(!b||VIEW) return; const r=state.rows[sel]; lotInit(r); const v=lotFromDate(b.dataset.cl);
+    if(r.show2&&r.lot1&&!r.lot2&&r.lot1!==v) r.lot2=v; else r.lot1=v; syncLot(r); touchRow(sel); renderLots(); refreshLight(); });
+  let tm=null; function later(){ clearTimeout(tm); tm=setTimeout(render,400); }
+  return {render:later};
+})();
 const Sync=(function(){
   const base=Object.assign({syncUrl:"",token:""},window.SUNA_CONFIG||{});
   let cfg=Object.assign({},base,LS.get(APP+":cfg",{}));
