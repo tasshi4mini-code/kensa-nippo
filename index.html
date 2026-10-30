@@ -896,19 +896,25 @@ var LotHelp=(function(){
     try{ return await zBusy[d]; }catch(e){ zBusy[d]=null; throw e; } }
   // 品番の最近のロット（新しい順に3つ）
   const lotsCache={};
+  // 同時にいくつか読む（1つずつ待たない）
+  async function pool(tasks,n){ const res=[]; let k=0; await Promise.all(Array.from({length:Math.min(n,tasks.length)},async()=>{ while(k<tasks.length){ const i=k++; try{ res[i]=await tasks[i](); }catch(e){ res[i]=null; } } })); return res; }
+  const prevM=m=>{ let [y,mm]=m.split("-").map(Number); mm--; if(mm<1){ mm=12; y--; } return `${y}-${String(mm).padStart(2,"0")}`; };
+  async function zMonthAll(m){ const ds=[...new Set((await zMonth(m)).map(x=>x.date))]; await pool(ds.map(d=>()=>zDay(d)),6); return ds; }
   async function lotsOf(n){ const lc=lotsCache[n]; if(lc&&Date.now()-lc.at<5*60*1000) return lc.list;
-    const out=[]; const stop=shift(ymdL(new Date()),-DEEP);
-    for(let d=ymdL(new Date());d>=stop&&out.length<NLOT;d=shift(d,-1)){ const days=new Set((await zMonth(d.slice(0,7))).map(x=>x.date)); if(!days.has(d)) continue; const o=await zDay(d); if(o[n]) out.push({d,qty:o[n]}); }
+    const out=[], today=ymdL(new Date()), stop=shift(today,-DEEP); let m=today.slice(0,7);
+    while(out.length<NLOT&&m>=stop.slice(0,7)){ const ds=(await zMonthAll(m)).filter(d=>d<=today&&d>=stop).sort().reverse();
+      for(const d of ds){ const o=ZP[d]||{}; if(o[n]&&out.length<NLOT) out.push({d,qty:o[n]}); } m=prevM(m); }
     lotsCache[n]={at:Date.now(),list:out}; return out; }
   // 検査：品番・ロットごとの検査数の合計（この画面の日報はこの端末の入力を使う）
   let kList={}, kDay={};
   async function kMonth(m){ const o=kList[m]; if(o&&Date.now()-o.at<3*60*1000) return o.days; const j=await Sync.list(m); kList[m]={at:Date.now(),days:j.days||[]}; return kList[m].days; }
-  async function kLoad(d,e){ const k=d+"|"+e, o=kDay[k]; if(o&&Date.now()-o.at<3*60*1000) return o.rows; const c=Sync.getCfg();
+  async function kLoad(d,e){ const k=d+"|"+e, o=kDay[k]; if(o&&Date.now()-o.at<10*60*1000&&d<state.date) return o.rows; if(o&&Date.now()-o.at<3*60*1000) return o.rows; const c=Sync.getCfg();
     const j=await getJ(c.syncUrl,{action:"load",token:c.token,date:d,equip:e}); const rows=[]; (j.items||[]).forEach(it=>{ if(it.type==="row") rows[+it.ref]=it.raw||{}; }); kDay[k]={at:Date.now(),rows}; return rows; }
   function rowLots(r){ lotInit(r); const L=[]; if(r.lot2){ if(r.lot1) L.push([r.lot1,num(r.t1)]); L.push([r.lot2,num(r.t2)]); } else if(r.lot1) L.push([r.lot1,num(r.total)]); return L; }
   async function inspected(n,ld,skipSel){ let sum=0; const today=ymdL(new Date()), months=[]; { let [y,m]=ld.slice(0,7).split("-").map(Number); const end=today.slice(0,7); for(let k=0;k<24;k++){ const mm=`${y}-${String(m).padStart(2,"0")}`; months.push(mm); if(mm>=end) break; m++; if(m>12){ m=1; y++; } } }
-    for(const m of months){ for(const x of (await kMonth(m))){ if(x.date<ld) continue; if(x.date===state.date&&x.equip===state.equip) continue;
-        (await kLoad(x.date,x.equip)).forEach(r=>{ if(!r||normHin(r.hin)!==n) return; rowLots(r).forEach(([l,q])=>{ if(dateFromLot(l)===ld) sum+=q||0; }); }); } }
+    const L=[]; for(const m of (await Promise.all(months.map(kMonth)))) for(const x of m){ if(x.date<ld) continue; if(x.date===state.date&&x.equip===state.equip) continue; L.push(x); }
+    const R=await pool(L.map(x=>()=>kLoad(x.date,x.equip)),6);
+    R.forEach(rows=>(rows||[]).forEach(r=>{ if(!r||normHin(r.hin)!==n) return; rowLots(r).forEach(([l,q])=>{ if(dateFromLot(l)===ld) sum+=q||0; }); }));
     state.rows.forEach((r,i)=>{ if(i===skipSel||!r||normHin(r.hin)!==n) return; rowLots(r).forEach(([l,q])=>{ if(dateFromLot(l)===ld) sum+=q||0; }); });
     return sum; }
   let seq=0; const ngShown=new WeakMap();
@@ -933,6 +939,11 @@ var LotHelp=(function(){
     }catch(e){ if(my!==seq) return; cand.innerHTML=`<div class="lch">ロットの候補を読み込めませんでした（${esc(e.message||e)}）</div>`; } }
   $("lotCand").addEventListener("click",e=>{ const b=e.target.closest("[data-cl]"); if(!b||VIEW) return; const r=state.rows[sel]; lotInit(r); const v=lotFromDate(b.dataset.cl);
     if(r.show2&&r.lot1&&!r.lot2&&r.lot1!==v) r.lot2=v; else r.lot1=v; syncLot(r); touchRow(sel); renderLots(); refreshLight(); });
+  async function prefetch(){ if(!Sync.on()||navigator.onLine===false) return; try{ const m=ymdL(new Date()).slice(0,7);
+      await Promise.all([zMonthAll(m),zMonthAll(prevM(m))]);
+      const L=[]; for(const ds of (await Promise.all([kMonth(m),kMonth(prevM(m))]))) ds.forEach(x=>{ if(!(x.date===state.date&&x.equip===state.equip)) L.push(x); });
+      await pool(L.map(x=>()=>kLoad(x.date,x.equip)),4); }catch(e){} }
+  setTimeout(prefetch,2500); document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") setTimeout(prefetch,1500); });
   let tm=null; function later(){ clearTimeout(tm); tm=setTimeout(render,400); }
   return {render:later};
 })();
