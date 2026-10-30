@@ -131,6 +131,14 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .lotcand button.on{background:#ecebfa}.lotcand button.full small{color:#b00020;font-weight:bold}
 .loterr{margin-top:8px;padding:10px 12px;border-radius:10px;font-weight:bold;font-size:15px;line-height:1.6}
 .loterr.ng{background:#ffebee;color:#b00020;border:2px solid #d50000}.loterr.warn{background:#fff8e1;color:#7a5a00;border:2px solid #f9a825}.loterr.ok{background:#e8f5e9;color:#1b5e20;border:1px solid #a5d6a7;font-weight:normal}
+/* v14: 入り数・前日の続き */
+.packnote:empty{display:none}
+.packnote{margin-top:8px;padding:8px 12px;border-radius:10px;font-size:15px;line-height:1.6;background:#f3f5f8;color:#37474f}
+.packnote b{font-size:18px}
+.packnote.warn{background:#fff8e1;color:#7a5a00;border:2px solid #f9a825;font-weight:bold}
+.packnote.ok{background:#e8f5e9;color:#1b5e20}
+.contbar{flex-basis:100%;background:#ede7f6;color:#4a148c;border:2px solid #7e57c2;border-radius:10px;padding:6px 10px;font-weight:bold;font-size:14px}
+.contbar[hidden]{display:none}
 </style>
 <style>
 header.top{background:#3d3a8c}
@@ -261,6 +269,7 @@ html,body,button,input,select,textarea,label,.chip{touch-action:manipulation}
   <section class="card" id="entryCard">
     <div class="eh">
       <div class="bigno" id="bigNo">検査 1</div>
+      <div class="contbar" id="contBar" hidden></div>
       <span class="sp" style="flex:1"></span>
       <button id="btnClearRow">この記録をクリア</button>
     </div>
@@ -285,6 +294,7 @@ html,body,button,input,select,textarea,label,.chip{touch-action:manipulation}
           <div class="lotpick"><input type="date" data-lotd="2" aria-label="ロット2の日付"><b class="lotv" data-lotv="2">－</b></div><button class="lprev" data-lotdel="2">ロット2を消す</button></div>
           <label class="f lt">ロット2の総数 <span class="id">Jumlah lot 2</span><input data-lt="2" inputmode="numeric"></label></div>
         <div class="lotfoot"><button id="btnLot2">＋ ロット2を追加 <span class="id">Tambah lot 2</span></button><div id="lotSum" class="lotsum"></div></div>
+        <div class="packnote" id="packNote"></div>
         <div class="loterr" id="lotErr"></div>
       </div>
     </div>
@@ -535,6 +545,7 @@ function renderLots(){ const r=state.rows[sel]; lotInit(r); const two=!!r.lot2||
   document.querySelector('.lotline[data-l="1"] .lbt').innerHTML=two?'ロット1の総数 <span class="id">Jumlah lot 1</span>':'総数 <span class="id">Jumlah total</span>';
   const p=prevLot(sel), pb=document.querySelector('[data-lotprev="1"]'); pb.hidden=VIEW||!p||!!r.lot1; pb.textContent=`前回と同じ ${p}`; pb.dataset.v=p;
   if(typeof LotHelp!=="undefined"&&LotHelp) LotHelp.render();
+  if(typeof renderPack==="function") renderPack(); if(typeof renderCont==="function") renderCont();
   $("lotSum").innerHTML=two?`合計の総数 <span class="id">Total</span>：<b>${esc(r.total||"0")}</b>`:""; renderLotTabs(); }
 function updateMarks(){ const r=state.rows[sel];
   document.querySelectorAll("#palBtns button").forEach(b=>b.className=r.pal===b.dataset.v?(b.dataset.v==="OK"?"on-ok":"on-ng"):"");
@@ -623,12 +634,12 @@ document.querySelectorAll("[data-lotd]").forEach(inp=>{ const mark=()=>{ inp._ro
     r["lot"+n]=lotFromDate(inp.value); syncLot(r); touchRow(i); renderLots(); refreshLight(); }); });
 document.querySelectorAll("[data-lotv]").forEach(b=>b.addEventListener("click",()=>{ const i=document.querySelector(`[data-lotd="${b.dataset.lotv}"]`); if(VIEW) return; try{ i.showPicker(); }catch(e){ i.focus(); i.click(); } }));
 document.querySelectorAll("[data-lt]").forEach(inp=>inp.addEventListener("input",()=>{ if(VIEW) return; const n=inp.dataset.lt, r=state.rows[sel]; lotInit(r); r["t"+n]=inp.value.trim(); syncLot(r);
-  if(r.total&&!r.st){ r.st=nowHM(); document.querySelector('#entryCard input[data-k="st"]').value=r.st; } touchRow(sel); refreshLight(); $("lotSum").innerHTML=r.lot2||r.show2?`合計の総数 <span class="id">Total</span>：<b>${esc(r.total||"0")}</b>`:""; if(LotHelp) LotHelp.render(); }));
+  if(r.total&&!r.st){ r.st=nowHM(); document.querySelector('#entryCard input[data-k="st"]').value=r.st; } touchRow(sel); refreshLight(); $("lotSum").innerHTML=r.lot2||r.show2?`合計の総数 <span class="id">Total</span>：<b>${esc(r.total||"0")}</b>`:""; if(LotHelp) LotHelp.render(); renderPack(); }));
 document.querySelector('[data-lotprev="1"]').addEventListener("click",e=>{ e.preventDefault(); if(VIEW) return; const r=state.rows[sel]; lotInit(r); r.lot1=e.currentTarget.dataset.v; syncLot(r); touchRow(sel); renderLots(); refreshLight(); });
 $("btnLot2").onclick=e=>{ e.preventDefault(); if(VIEW) return; const r=state.rows[sel]; lotInit(r); r.show2=true; ensureLotD(r); renderLots(); renderDefs(); updateNg(); toast("ロット2の日付と総数を入れてください"); };
 document.querySelector('[data-lotdel="2"]').addEventListener("click",async e=>{ e.preventDefault(); if(VIEW) return; const r=state.rows[sel]; if((r.lot2||ngD(r.d2))&&!await askConfirm("ロット2を消しますか？（ロット2の不良の数も消えます）")) return; r.lot2=""; r.t2=""; r.show2=false; if(r.d1){ r.d=Object.assign(blankD(),r.d1); delete r.d1; delete r.d2; } curLot=1; syncLot(r); renderDefs(); touchRow(sel); renderLots(); refreshLight(); });
 document.querySelectorAll("[data-now]").forEach(b=>b.addEventListener("click",e=>{ e.preventDefault(); if(VIEW) return; const k=b.dataset.now; state.rows[sel][k]=nowHM(); document.querySelector(`#entryCard input[data-k="${k}"]`).value=state.rows[sel][k]; touchRow(sel); refreshLight(); }));
-$("palBtns").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b||VIEW) return; const r=state.rows[sel]; r.pal=r.pal===b.dataset.v?"":b.dataset.v; if(r.pal&&!r.st){ r.st=nowHM(); document.querySelector('#entryCard input[data-k="st"]').value=r.st; } touchRow(sel); refreshLight(); });
+$("palBtns").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b||VIEW) return; const r=state.rows[sel]; r.pal=r.pal===b.dataset.v?"":b.dataset.v; if(r.pal&&!r.st){ r.st=nowHM(); document.querySelector('#entryCard input[data-k="st"]').value=r.st; } touchRow(sel); refreshLight();  renderPack(); });
 $("freqBtns").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b||VIEW) return; const r=state.rows[sel]; r.freq=r.freq===b.dataset.v?"":b.dataset.v; touchRow(sel); refreshLight(); });
 $("fixBtns").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b||VIEW) return; const r=state.rows[sel]; r.fix[b.dataset.v]=!r.fix[b.dataset.v]; touchRow(sel); refreshLight(); });
 $("defs").addEventListener("click",e=>{ if(VIEW) return; const p=e.target.closest("[data-dp]"), m=e.target.closest("[data-dm]"); if(!p&&!m) return; const k=(p||m).dataset[p?"dp":"dm"], r=state.rows[sel], D=curD(r);
@@ -652,7 +663,7 @@ $("btnAddEv").onclick=()=>{ if(VIEW||needInsp()) return; const ev={id:uid(),u:Da
 $("events").addEventListener("input",e=>{ if(VIEW) return; const box=e.target.closest(".ev"), k=e.target.dataset.ek; if(box&&k){ const ev=state.events[+box.dataset.e]; ev[k]=e.target.value; ev.u=Date.now(); save(); Sync.queue("event",ev.id); } });
 $("events").addEventListener("click",async e=>{ const d=e.target.dataset.del; if(d!=null&&!VIEW&&await askConfirm("この記録を削除しますか?")){ const ev=state.events[+d]; ev.del=true; ev.u=Date.now(); save(); Sync.queue("event",ev.id); renderEvents(); } });
 // 日付・作業者の切り替え
-function switchDay(){ const d=$("date").value, q=$("equip").value; if(!d||!q) return; load(d,q); sel=Math.max(0,state.rows.findIndex(r=>!rowHas(r))); renderAll(); Sync.pull(); }
+function switchDay(){ const d=$("date").value, q=$("equip").value; if(!d||!q) return; load(d,q); sel=Math.max(0,state.rows.findIndex(r=>!rowHas(r))); renderAll(); Promise.resolve(Sync.pull()).then(carryOver); }
 $("date").addEventListener("change",switchDay);
 $("equip").addEventListener("change",()=>{ if($("equip").value==="__add"){ const n=(prompt("検査員の名前を入れてください")||"").trim(); if(!n){ renderEquipSel(); return; }
     if(!inspList().includes(n)){ INSP={list:[...inspList(),n],u:INSP.u}; LS.set(APP+":insp",INSP); } renderEquipSel(); $("equip").value=n; toast("全端末に名前を登録するときは「設定」→「検査員の名前」から保存してください"); }
@@ -710,7 +721,7 @@ $("btnList").onclick=()=>{ listYM=ymOf(state.date||todayStr()); $("dlgList").sho
 $("mPrev").onclick=()=>{ listYM=ymShift(listYM,-1); renderList(); };
 $("mNext").onclick=()=>{ listYM=ymShift(listYM,1); renderList(); };
 $("mSel").onchange=e=>{ listYM=e.target.value; renderList(); };
-$("btnNewDay").onclick=()=>{ $("dlgList").close(); load(todayStr(),defaultEquip()); sel=0; renderAll(); Sync.pull(); };
+$("btnNewDay").onclick=()=>{ $("dlgList").close(); load(todayStr(),defaultEquip()); sel=0; renderAll(); Promise.resolve(Sync.pull()).then(carryOver); };
 $("savedList").addEventListener("click",e=>{ const it=e.target.closest(".list-item.open"); if(!it) return;
   $("dlgList").close(); load(it.dataset.d,it.dataset.q); sel=0; renderAll(); Sync.pull(); toast(fmtDay(it.dataset.d)+" "+it.dataset.q+" を開きました"); window.scrollTo({top:0,behavior:"smooth"}); });
 
@@ -910,7 +921,7 @@ var LotHelp=(function(){
   async function kMonth(m){ const o=kList[m]; if(o&&Date.now()-o.at<3*60*1000) return o.days; const j=await Sync.list(m); kList[m]={at:Date.now(),days:j.days||[]}; return kList[m].days; }
   async function kLoad(d,e){ const k=d+"|"+e, o=kDay[k]; if(o&&Date.now()-o.at<10*60*1000&&d<state.date) return o.rows; if(o&&Date.now()-o.at<3*60*1000) return o.rows; const c=Sync.getCfg();
     const j=await getJ(c.syncUrl,{action:"load",token:c.token,date:d,equip:e}); const rows=[]; (j.items||[]).forEach(it=>{ if(it.type==="row") rows[+it.ref]=it.raw||{}; }); kDay[k]={at:Date.now(),rows}; return rows; }
-  function rowLots(r){ lotInit(r); const L=[]; if(r.lot2){ if(r.lot1) L.push([r.lot1,num(r.t1)]); L.push([r.lot2,num(r.t2)]); } else if(r.lot1) L.push([r.lot1,num(r.total)]); return L; }
+  function rowLots(r){ if(r&&r.contFrom) return []; lotInit(r); const L=[]; if(r.lot2){ if(r.lot1) L.push([r.lot1,num(r.t1)]); L.push([r.lot2,num(r.t2)]); } else if(r.lot1) L.push([r.lot1,num(r.total)]); return L; }
   async function inspected(n,ld,skipSel){ let sum=0; const today=ymdL(new Date()), months=[]; { let [y,m]=ld.slice(0,7).split("-").map(Number); const end=today.slice(0,7); for(let k=0;k<24;k++){ const mm=`${y}-${String(m).padStart(2,"0")}`; months.push(mm); if(mm>=end) break; m++; if(m>12){ m=1; y++; } } }
     const L=[]; for(const m of (await Promise.all(months.map(kMonth)))) for(const x of m){ if(x.date<ld) continue; if(x.date===state.date&&x.equip===state.equip) continue; L.push(x); }
     const R=await pool(L.map(x=>()=>kLoad(x.date,x.equip)),6);
@@ -947,6 +958,44 @@ var LotHelp=(function(){
   let tm=null; function later(){ clearTimeout(tm); tm=setTimeout(render,400); }
   return {render:later};
 })();
+
+// ---- v14：入り数マスター（毎朝、パソコンが「パレット・入り数」のExcelから送ってくる）----
+let PACK=LS.get(APP+":pack",{rows:{},at:0});
+async function loadPack(){ if(!Sync.on()||navigator.onLine===false) return; try{ const c=Sync.getCfg();
+    const u=c.syncUrl+(c.syncUrl.includes("?")?"&":"?")+new URLSearchParams({action:"load",token:c.token,date:"_global",equip:"pack"});
+    const j=await (await fetch(u,{redirect:"follow"})).json(); if(!j.ok) return; const it=(j.items||[]).find(x=>x.type==="pack");
+    if(it&&it.raw&&it.raw.rows){ PACK={rows:it.raw.rows,at:it.raw.at||Date.now()}; LS.set(APP+":pack",PACK); renderPack(); } }catch(e){} }
+function packOf(hin){ const n=normHin(hin); return n?(PACK.rows||{})[n]||null:null; }
+const packWarned=new WeakMap();
+function renderPack(){ const box=$("packNote"); if(!box||!state) return; const r=state.rows[sel]; if(!r||!r.hin||!Object.keys(PACK.rows||{}).length){ box.innerHTML=""; box.className="packnote"; return; }
+  const p=packOf(r.hin); if(!p){ box.className="packnote"; box.innerHTML=`入り数マスターにない品番です（入り数の確認はできません）`; return; }
+  const n=num(p.n), t=num(r.total);
+  if(t==null){ box.className="packnote"; box.innerHTML=`この品番の入り数：<b>${n}</b> 個 / Isi palet`; return; }
+  if(t===n){ box.className="packnote ok"; box.innerHTML=`入り数 <b>${n}</b> 個　✓ 総数と一致`; return; }
+  const msg=t>n?`⚠ 総数 ${t}個 が入り数 ${n}個 より <b>${t-n}個 多い</b> です。数をもう一度確認してください / Lebih banyak`:`⚠ 総数 ${t}個 が入り数 ${n}個 より <b>${n-t}個 少ない</b> です。${r.pal==="NG"?"パレット内残品がNG（端数）なら問題ありません":"数をもう一度確認してください（端数のときはパレット内残品を「NG」に）"} / Lebih sedikit`;
+  box.className="packnote warn"; box.innerHTML=msg;
+  const key=r.hin+"|"+t; if(packWarned.get(r)!==key&&document.activeElement&&document.activeElement.dataset&&document.activeElement.dataset.lt){ packWarned.set(r,key); toast(t>n?`⚠ 入り数 ${n}個より多いです`:`⚠ 入り数 ${n}個より少ないです`); } }
+setInterval(()=>{ if(document.visibilityState==="visible") loadPack(); },30*60*1000);
+
+// ---- v14：前日に検査の途中で終わったとき、その検査員の今日の日報の1番に入れる ----
+let carryBusy=false;
+async function carryOver(){ if(VIEW||carryBusy||!state||state.date!==todayStr()||!state.equip||state.equip===NOSEL||state.rows.some(rowHas)||!Sync.on()) return;
+  carryBusy=true; const d0=state.date, e0=state.equip;
+  try{ const c=Sync.getCfg(), months=[d0.slice(0,7)]; { let [y,m]=d0.slice(0,7).split("-").map(Number); m--; if(m<1){ m=12; y--; } months.push(`${y}-${String(m).padStart(2,"0")}`); }
+    let prev=null; for(const m of months){ const j=await Sync.list(m); (j.days||[]).forEach(x=>{ if(x.equip===e0&&x.date<d0&&(!prev||x.date>prev)) prev=x.date; }); if(prev) break; }
+    if(!prev) return;
+    let rows=null; const lc=LS.get(APP+":day:"+prev+"|"+e0,null);
+    const u=c.syncUrl+(c.syncUrl.includes("?")?"&":"?")+new URLSearchParams({action:"load",token:c.token,date:prev,equip:e0});
+    try{ const j=await (await fetch(u,{redirect:"follow"})).json(); if(j.ok){ rows=[]; (j.items||[]).forEach(it=>{ if(it.type==="row") rows[+it.ref]=it.raw||{}; }); } }catch(e){}
+    if((!rows||!rows.length)&&lc) rows=lc.rows||[];
+    if(!rows) return; let li=-1; rows.forEach((r,i)=>{ if(r&&r.hin) li=i; }); if(li<0) return; const p=rows[li];
+    if(!p.st||p.en) return;   // 検査開始があって、検査終了が空 → 途中で終わった
+    if(state.date!==d0||state.equip!==e0||state.rows.some(rowHas)) return;
+    const r=state.rows[0]; ["hin","name","ok","lot","lot1","lot2","t1","t2","total","show2"].forEach(k=>{ if(p[k]!=null) r[k]=p[k]; });
+    const [,mm,dd]=prev.split("-"); r.contFrom=`${prev}|${li+1}`; r.contNote=`${+mm}/${+dd} 検査${li+1}`;
+    sel=0; touchRow(0); renderAll(); toast(`前日（${+mm}/${+dd}）の検査${li+1}（${p.hin}）の続きを1番に入れました`);
+  }catch(e){} finally{ carryBusy=false; } }
+function renderCont(){ const b=$("contBar"); if(!b||!state) return; const r=state.rows[sel]; b.hidden=!(r&&r.contFrom); if(r&&r.contFrom) b.textContent=`↪ 前日（${r.contNote||r.contFrom}）から続けて検査しています / Lanjutan kemarin`; }
 const Sync=(function(){
   const base=Object.assign({syncUrl:"",token:""},window.SUNA_CONFIG||{});
   let cfg=Object.assign({},base,LS.get(APP+":cfg",{}));
@@ -1103,7 +1152,7 @@ sel=Math.max(0,state.rows.findIndex(r=>!rowHas(r)));
 renderAll();
 if(VIEW){ $("viewBadge").hidden=false; document.title="検査日報（閲覧用）"; document.querySelectorAll("#entryCard input,#entryCard textarea,.card input").forEach(el=>el.readOnly=true); }
 if(!VIEW&&!inspList().length) setTimeout(()=>toast("「設定」→「検査員の名前」で5人の名前を登録してください"),800);
-Sync.status(); Sync.flush().then(()=>Sync.pull()); Sync.loadMaster(false);
+Sync.status(); Sync.flush().then(()=>Sync.pull()).then(()=>{ if(!/[?&]export=/.test(location.search)){ carryOver(); loadPack(); } }); Sync.loadMaster(false);
 const EXP={csv:()=>csvRows(), master:()=>Sync.loadMaster(true), load:(d,q)=>load(d,q), empty:()=>!state.rows.some(rowHas)&&!liveEvents().length&&!liveWorks().length, name:()=>"検査日報_"+state.equip.replace(/[\\/:*?"<>|（）() ]/g,"")+"_"+state.date.replace(/-/g,"")+".xlsx"};
 // ---- 自動Excel出力（URL末尾に ?export=開始日..終了日 を付けて開くと、その期間の日報Excelを作って画面に埋め込む）----
 (async function(){
