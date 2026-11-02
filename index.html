@@ -898,7 +898,9 @@ var LotHelp=(function(){
   let ZP=LS.get(LS2,{}), zList={}, zBusy={};
   async function zMonth(m){ const c=await zcfg(); if(!c) throw new Error("造型日報の場所がわかりません");
     const old=zList[m]; if(old&&Date.now()-old.at<5*60*1000) return old.days; const j=await getJ(c.url,{action:"list",token:c.token,month:m}); zList[m]={at:Date.now(),days:j.days||[]}; return zList[m].days; }
-  async function zDay(d){ const fixed=d<shift(ymdL(new Date()),-2); if(ZP[d]&&(fixed||Date.now()-(ZP[d]._at||0)<5*60*1000)) return ZP[d];
+  // v15：覚えた内容が「その日が終わって3日以上たってから読んだもの」のときだけ固定。途中の日に読んだものは読み直す
+  async function zDay(d,force){ const c0=ZP[d], settled=c0&&(c0._at||0)>=new Date(shift(d,3)+"T00:00:00").getTime();
+    if(!force&&c0&&(settled||Date.now()-(c0._at||0)<5*60*1000)) return c0;
     if(zBusy[d]) return zBusy[d];
     zBusy[d]=(async()=>{ const c=await zcfg(); const L=(await zMonth(d.slice(0,7))).filter(x=>x.date===d), o={_at:Date.now()};
       for(const x of L){ const j=await getJ(c.url,{action:"load",token:c.token,date:d,equip:x.equip||""});
@@ -940,7 +942,7 @@ var LotHelp=(function(){
         :`<div class="lch" style="color:#b00020">直近${DEEP}日の造型日報にこの品番がありません。現品票のロットを確認してください</div>`;
       // 造型数と検査数
       const msgs=[]; let lv="ok";
-      for(const [l,q] of rowLots(r)){ const ld=dateFromLot(l); if(!ld) continue; const o=await zDay(ld); if(my!==seq) return; const made=o[n]||0;
+      for(const [l,q] of rowLots(r)){ const ld=dateFromLot(l); if(!ld) continue; let o=await zDay(ld); if(my!==seq) return; if(!o[n]){ o=await zDay(ld,true); if(my!==seq) return; } const made=o[n]||0;
         if(!made){ msgs.push(`⚠ ロット ${esc(l)}（${md(ld)}）にこの品番の造型の記録がありません。ロットを確認してください`); if(lv!=="ng") lv="warn"; continue; }
         const others=await inspected(n,ld,sel); if(my!==seq) return; const tot=others+(q||0);
         if(tot>made){ msgs.push(`⚠ 検査数が造型数を超えています：ロット ${esc(l)}　造型 ${made}個 ／ 検査 ${tot}個（この検査 ${q||0}個を含む・${tot-made}個多い）`); lv="ng"; }
