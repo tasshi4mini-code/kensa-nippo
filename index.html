@@ -815,10 +815,38 @@ function dataRows(){ const out=[DATA_HEAD];
     else out.push(base(r.lot,r.total,r.d,ngOf(r),x==null?null:Math.round(x*100)/100,"")); });
   return out; }
 // CSV（必要な項目だけ）：1行＝1記録。不良はロットの合計、ロットごとの総数は右の4列
-function csvRows(){ const out=[["検査日","作業者","ロット","品番","品名","総数",...DEFS.map(d=>d[1]),"ロット1","ロット1総数","ロット2","ロット2総数"]];
+// ---- 生産管理システム用：品番コード・社員番号（パソコンが毎朝「生産管理システム_対応表.xlsx」から送る）----
+var SysM=(function(){ let d=null, idx=null;
+  const norm=h=>String(h||"").normalize("NFKC").toUpperCase().replace(/[\s　]/g,"").replace(/^RD0*(\d)/,"RD$1");
+  const nn=s=>String(s||"").normalize("NFKC").replace(/[\s　]/g,"");
+  function set(x){ d=x; idx={}; Object.entries((d&&d.m)||{}).forEach(([c,v])=>{ const k=norm(v[0]); (idx[k]=idx[k]||[]).push(c); }); }
+  { const c=LS.get(APP+":sysm",null); if(c) set(c); }
+  // 検査日報のスプレッドシートに置いてある（造型日報は検査日報の config.js から場所を知る）
+  async function cfg(){ if(APP==="kensa") return Sync.getCfg(); try{ const t=await (await fetch("/kensa-nippo/config.js",{cache:"no-store"})).text(); const w={}; new Function("window",t)(w); const c=w.SUNA_CONFIG||{}; return c.syncUrl?c:null; }catch(e){ return null; } }
+  async function load(){ try{ const c=await cfg(); if(!c||!c.syncUrl) return; const u=c.syncUrl+(c.syncUrl.includes("?")?"&":"?")+new URLSearchParams({action:"load",token:c.token||"",date:"_global",equip:"sysm"});
+      const j=await (await fetch(u,{redirect:"follow"})).json(); const L=(j.items||[]).filter(x=>x.type==="sysm"&&x.raw), b=L.find(x=>x.ref==="sysm"); if(!b) return;
+      const raw=Object.assign({},b.raw,{m:{}}); L.forEach(x=>{ if(x.ref!=="sysm"&&x.raw.at===b.raw.at) Object.assign(raw.m,x.raw.m||{}); }); set(raw); LS.set(APP+":sysm",raw); }catch(e){} }
+  // 品番 → {code, hin(生産管理の品番), name, cust}。対応表 → 0のちがいを無視した一致（1つだけのとき）
+  function hin(h){ if(!d||!h) return null; const map=d.map||{}, has=x=>Object.prototype.hasOwnProperty.call(map,x); let code;
+    if(has(h)) code=map[h];   // 対応表にある（NG のときは空 → 品番コードなし）
+    else { const k=norm(h); const k2=Object.keys(map).find(x=>norm(x)===k); if(k2) code=map[k2]; else { const c=idx[k]; if(c&&c.length===1) code=c[0]; } }
+    const m=code&&(d.m||{})[code]; return m?{code,hin:m[0],name:m[1],cust:m[2]}:(code?{code,hin:h,name:"",cust:""}:null); }
+  // 名前 → 社員番号（同じ名前 → 空白を除いて同じ → 名前の頭が1人だけ一致）
+  function emp(n){ if(!d||!n) return ""; const E=d.emp||{}; if(E[n]!=null) return String(E[n]); const k=nn(n); let hit=Object.keys(E).filter(x=>nn(x)===k);
+    if(!hit.length) hit=Object.keys(E).filter(x=>nn(x).startsWith(k)||k.startsWith(nn(x))); return hit.length===1?String(E[hit[0]]):""; }
+  const names=s=>String(s||"").split(/[・,、\/\s　]+/).map(x=>x.trim()).filter(Boolean);
+  return {load,hin,emp,names,ready:()=>!!d,info:()=>d?{at:d.at,file:d.file}:null};
+})();
+const sysDate=d=>String(d||"").replace(/-/g,"/");
+
+// v16：生産管理システムに取り込む CSV（作業者＝検査担当 11、2つ目の作業者＝検査者の社員番号、不良はコード＋個数）
+const SYS_DEF={kake:110,dakon:111,suna:112,hari:113,yaki:114,ire:115,kata:116,ware:117,yuzakai:118,hike:119,oshi:120,ikobu:121,shima:122};
+function csvRows(){ const out=[["検査日","作業者","品番コード","品番","品名","ロット","作業者","良品数",...DEFS.flatMap(d=>["コード",d[1]]),"ロット1","ロット1総数","ロット2","ロット2総数"]];
+  const who=SysM.emp(state.equip);
   state.rows.forEach(r=>{ if(!rowHas(r)) return; lotInit(r); syncLot(r);
     const d=r.lot2?(()=>{ const s=blankD(), a=r.d1||r.d||{}, b=r.d2||{}; DEFK.forEach(k=>{ const x=(num(a[k])||0)+(num(b[k])||0); s[k]=x?String(x):""; }); return s; })():r.d;
-    out.push([state.date,state.equip,r.lot,r.hin,r.name,r.total,...DEFK.map(k=>d[k]),r.lot1,r.t1,r.lot2,r.lot2?r.t2:""]); });
+    const s=SysM.hin(r.hin)||{};
+    out.push([sysDate(state.date),11,s.code||"",s.hin||r.hin,r.name,r.lot1||r.lot,who,r.total,...DEFK.flatMap(k=>{ const n=num(d[k]); return n?[SYS_DEF[k]||"",n]:["",""]; }),r.lot1,r.lot1?(r.lot2?r.t1:r.total):"",r.lot2,r.lot2?r.t2:""]); });
   return out; }
 function workRows(){ const out=[["検査日","作業者","No","開始","終了","ほかの作業","ほかの工程","テスト","メモ"]]; liveWorks().forEach((w,i)=>out.push([state.date,state.equip,i+1,w.start,w.end,w.work,w.proc,w.test?"○":"",w.memo])); return out; }
 function eventRows(){ const out=[["検査日","作業者","No","発生時間","終了時間","担当","異常/変化点内容","処置内容"]]; liveEvents().forEach((e,i)=>out.push([state.date,state.equip,i+1,e.start,e.end,e.person,e.content,e.action])); return out; }
@@ -1155,7 +1183,7 @@ renderAll();
 if(VIEW){ $("viewBadge").hidden=false; document.title="検査日報（閲覧用）"; document.querySelectorAll("#entryCard input,#entryCard textarea,.card input").forEach(el=>el.readOnly=true); }
 if(!VIEW&&!inspList().length) setTimeout(()=>toast("「設定」→「検査員の名前」で5人の名前を登録してください"),800);
 Sync.status(); Sync.flush().then(()=>Sync.pull()).then(()=>{ if(!/[?&]export=/.test(location.search)){ carryOver(); loadPack(); } }); Sync.loadMaster(false);
-const EXP={csv:()=>csvRows(), master:()=>Sync.loadMaster(true), load:(d,q)=>load(d,q), empty:()=>!state.rows.some(rowHas)&&!liveEvents().length&&!liveWorks().length, name:()=>"検査日報_"+state.equip.replace(/[\\/:*?"<>|（）() ]/g,"")+"_"+state.date.replace(/-/g,"")+".xlsx"};
+const EXP={csv:()=>csvRows(), master:async()=>{ await Sync.loadMaster(true); await SysM.load(); }, load:(d,q)=>load(d,q), empty:()=>!state.rows.some(rowHas)&&!liveEvents().length&&!liveWorks().length, name:()=>"検査日報_"+state.equip.replace(/[\\/:*?"<>|（）() ]/g,"")+"_"+state.date.replace(/-/g,"")+".xlsx"};
 // ---- 自動Excel出力（URL末尾に ?export=開始日..終了日 を付けて開くと、その期間の日報Excelを作って画面に埋め込む）----
 (async function(){
   const m=/[?&]export=([^&#]*)/.exec(location.search); if(!m) return;
