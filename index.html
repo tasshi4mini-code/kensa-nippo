@@ -225,6 +225,23 @@ html,body,button,input,select,textarea,label,.chip{touch-action:manipulation}
 .lottabs button.on{background:#3d3a8c;color:#fff}
 .ltnote{flex-basis:100%}
 .ngsplit{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:15px}.ngsplit .cur{background:#ecebfa;border-radius:6px;padding:0 6px}.ngsplit b{font-size:20px}
+/* v18：バリ取りのみ */
+.baribtn{min-height:44px;padding:0 14px;border-radius:10px;border:2px solid #ef6c00;background:#fff;color:#ef6c00;font-weight:bold;font-size:16px;cursor:pointer}
+.baribtn.on{background:#ef6c00;color:#fff}
+#entryCard.bari{border:3px solid #ef6c00;background:#fff8ef}
+#entryCard.bari .bigno{background:#ef6c00;color:#fff;border-color:#ef6c00}
+.barinote{flex:1 1 100%;background:#ffe0b2;color:#7a3e00;border-radius:8px;padding:6px 10px;font-weight:bold;font-size:14px}
+.chip.bari{background:#ffe0b2;color:#7a3e00;border-color:#ef6c00}
+.chip.bari.ng{background:#ffcc80;color:#b00020}
+tr.bari td{background:#fff3e0}
+/* v18：前日の検査未完了 */
+.pend{background:#fff;border:2px solid #7e57c2;border-radius:12px;padding:10px 12px;margin:0 0 12px}
+.pend h3{margin:0 0 6px;font-size:16px;color:#4527a0}
+.pend .pi{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px dashed #d1c4e9;padding:8px 0}
+.pend .pi:first-of-type{border-top:0}
+.pend .pi b{font-size:16px}.pend .pi .sm{color:#5d6778;font-size:13px}
+.pend .pi button{margin-left:auto;min-height:44px;border-radius:10px;border:0;background:#5e35b1;color:#fff;font-weight:bold;padding:0 14px;cursor:pointer}
+.pend .pi.done{opacity:.55}.pend .pi.done button{background:#9e9e9e}
 </style>
 <body>
 <header class="top">
@@ -261,6 +278,7 @@ html,body,button,input,select,textarea,label,.chip{touch-action:manipulation}
   </section>
 
   <section class="card">
+    <div class="pend" id="pendBox" hidden></div>
     <h2>検査記録を選択 <span class="id">Pilih catatan</span></h2>
     <div class="chipsN" id="chips"></div>
     <div class="legend"><span class="lg-ok">入力済 <span class="id">Selesai</span></span><span class="lg-ng">割れ・NGあり</span></div>
@@ -271,6 +289,7 @@ html,body,button,input,select,textarea,label,.chip{touch-action:manipulation}
       <div class="bigno" id="bigNo">検査 1</div>
       <div class="contbar" id="contBar" hidden></div>
       <span class="sp" style="flex:1"></span>
+      <button class="baribtn" id="btnBari">✂ バリ取りのみ <span class="id">Hanya buang burr</span></button>
       <button id="btnClearRow">この記録をクリア</button>
     </div>
 
@@ -500,11 +519,11 @@ function liveWorks(){ return state.works.filter(w=>!w.del); }
 function num(v){ if(v===""||v==null) return null; const n=parseFloat(String(v).replace(/[，,]/g,".").replace(/[０-９．]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))); return isNaN(n)?null:n; }
 function fmtNum(n){ return Math.round(n*1000)/1000+""; }
 function ngOf(r){ return DEFK.reduce((a,k)=>a+(num(r.d[k])||0),0); }
-function rateOf(r){ const t=num(r.total), n=ngOf(r); return t?n/t*100:null; }
+function rateOf(r){ if(r.bari) return null; const t=num(r.total), n=ngOf(r); return t?n/t*100:null; }
 function rateTxt(r){ const x=rateOf(r); return x==null?"":(Math.round(x*100)/100)+"%"; }
 function fixTxt(r){ return Object.keys(FIXL).filter(k=>r.fix[k]).map(k=>FIXL[k]).join("・"); }
 function ngDetail(r){ return DEFK.filter(k=>num(r.d[k])).map(k=>`${DEFL[k]}${r.d[k]}`).join("・"); }
-function rowHas(r){ return ["pal","st","en","lot","hin","name","total","freq","note"].some(k=>(r[k]||"")!=="") || ngOf(r)>0 || Object.values(r.fix).some(Boolean); }
+function rowHas(r){ return !!r.bari || ["pal","st","en","lot","hin","name","total","freq","note"].some(k=>(r[k]||"")!=="") || ngOf(r)>0 || Object.values(r.fix).some(Boolean); }
 const RATE_WARN=num(CFG.ngRateWarn);
 function isBad(r){ const x=rateOf(r); return (num(r.d.ware)||0)>0 || r.pal==="NG" || (RATE_WARN!=null&&x!=null&&x>=RATE_WARN); }
 
@@ -514,7 +533,8 @@ function renderEquipSel(){ const list=inspList(), cur=state?state.equip:defaultE
   $("equip").innerHTML=(cur===NOSEL?`<option value="${NOSEL}" selected>（作業者を選んでください）</option>`:"")+opts.map(n=>`<option ${n===cur?"selected":""}>${esc(n)}</option>`).join("")+(VIEW?"":`<option value="__add">＋ 名前を追加…</option>`);
   $("equip").style.outline=cur===NOSEL?"3px solid #ffeb3b":""; }
 function needInsp(){ if(state.equip!==NOSEL) return false; toast("先に画面上の「作業者」で自分の名前を選んでください / Pilih nama Anda dulu"); $("equip").focus(); return true; }
-function renderChips(){ $("chips").innerHTML=state.rows.map((r,i)=>`<button class="chip ${isBad(r)?"ng":(rowHas(r)?"filled":"")} ${i===sel?"sel":""}" data-i="${i}">検査${i+1}<small>${esc(r.hin||"－")}</small></button>`).join(""); }
+function renderChips(){ $("chips").innerHTML=state.rows.map((r,i)=>r.bari?`<button class="chip bari ${ngOf(r)?"ng":""} ${i===sel?"sel":""}" data-i="${i}">✂バリ取り${i+1}<small>${esc(r.hin||"－")}${ngOf(r)?" NG"+ngOf(r):""}</small></button>`
+    :`<button class="chip ${isBad(r)?"ng":(rowHas(r)?"filled":"")} ${i===sel?"sel":""}" data-i="${i}">検査${i+1}<small>${esc(r.hin||"－")}</small></button>`).join(""); }
 function renderHeader(){ $("date").value=state.date; renderEquipSel(); $("inspName").textContent=state.equip; $("confirmBy").value=state.confirmBy; renderMasterStat(); }
 function renderMasterStat(){ const n=MIDX.length, at=MASTER.at?new Date(MASTER.at):null;
   const t=n?`品番マスター：${n}件` + (at?`（${at.getMonth()+1}/${at.getDate()} ${at.getHours()}:${String(at.getMinutes()).padStart(2,"0")} 読込）`:"") : "品番マスターが未登録です（設定 → マスターをExcelから更新）";
@@ -537,7 +557,9 @@ function updateNg(){ const r=state.rows[sel], n=ngOf(r), x=rateOf(r);
   $("alertBox").innerHTML=al.map(a=>`<div class="alert">${a}</div>`).join(""); }
 function hinStatus(r){ if(!r.hin) return ["",""]; if(r.ok) return ["ok","✓ マスター登録あり / Terdaftar"]; return MIDX.length?["ng","マスターにない品番です（品名を手入力） / Tidak ada di master"]:["",""]; }
 function renderEntry(){ const r=state.rows[sel];
-  $("bigNo").textContent="検査 "+(sel+1);
+  $("bigNo").textContent=(r.bari?"✂ バリ取り ":"検査 ")+(sel+1); $("entryCard").classList.toggle("bari",!!r.bari); $("btnBari").classList.toggle("on",!!r.bari); $("btnBari").disabled=VIEW;
+  { let n=$("bariNote"); if(!n){ n=document.createElement("div"); n.id="bariNote"; n.className="barinote"; $("btnBari").after(n); } n.hidden=!r.bari;
+    n.innerHTML="✂ バリ取りのみ（検査はしていない）：総数は入れなくてよい。バリ取り中に見つけた不良だけ入れてください / Hanya buang burr: masukkan cacat saja"; }
   document.querySelectorAll("#entryCard [data-k]").forEach(inp=>{ const k=inp.dataset.k; inp.value=r[k]||"";
     if(k==="lot"&&!r.lot){ const p=prevLot(sel); inp.placeholder=p?"前回 "+p:"例 C26-9-23"; } });
   const [c,t]=hinStatus(r); $("hinSt").className="hinst "+c; $("hinSt").textContent=t;
@@ -561,9 +583,9 @@ const TH=["No","パレット<br>残品","検査時刻","ロット","品番","品
 function renderTable(){
   $("thead").innerHTML=TH.map(t=>`<th>${t}</th>`).join("");
   const out=[]; let tt=0, tn=0; const td={}; DEFK.forEach(k=>td[k]=0);
-  state.rows.forEach((r,i)=>{ if(!rowHas(r)) return; const n=ngOf(r); tt+=num(r.total)||0; tn+=n; DEFK.forEach(k=>td[k]+=num(r.d[k])||0);
-    out.push(`<tr data-i="${i}" class="${i===sel?"sel":""}"><td class="no"><b>${i+1}</b></td><td class="${r.pal==="NG"?"jNG":""}">${esc(r.pal)}</td><td style="white-space:nowrap">${esc(r.st)}${(r.st||r.en)?"〜":""}${esc(r.en)}</td><td style="white-space:nowrap">${r.lot2?`${esc(r.lot1)} <small>(${esc(r.t1||0)})</small><br>${esc(r.lot2)} <small>(${esc(r.t2||0)})</small>`:esc(r.lot)}</td>`+
-      `<td style="white-space:nowrap">${esc(r.hin)}${r.hin&&!r.ok&&MIDX.length?' <span style="color:#c62828">*</span>':""}</td><td>${esc(r.name)}</td><td><b>${esc(r.total)}</b></td>`+
+  state.rows.forEach((r,i)=>{ if(!rowHas(r)) return; const n=ngOf(r); if(!r.bari) tt+=num(r.total)||0; tn+=n; DEFK.forEach(k=>td[k]+=num(r.d[k])||0);
+    out.push(`<tr data-i="${i}" class="${i===sel?"sel":""} ${r.bari?"bari":""}"><td class="no"><b>${i+1}</b></td><td class="${r.pal==="NG"?"jNG":""}">${esc(r.pal)}</td><td style="white-space:nowrap">${esc(r.st)}${(r.st||r.en)?"〜":""}${esc(r.en)}</td><td style="white-space:nowrap">${r.lot2?`${esc(r.lot1)} <small>(${esc(r.t1||0)})</small><br>${esc(r.lot2)} <small>(${esc(r.t2||0)})</small>`:esc(r.lot)}</td>`+
+      `<td style="white-space:nowrap">${esc(r.hin)}${r.hin&&!r.ok&&MIDX.length?' <span style="color:#c62828">*</span>':""}</td><td>${esc(r.name)}</td><td><b>${r.bari?'<span style="color:#ef6c00">✂バリ取り</span>':esc(r.total)}</b></td>`+
       DEFK.map(k=>`<td class="${num(r.d[k])?(k==="ware"?"jNG":"warn"):""}">${num(r.d[k])?r.d[k]:""}</td>`).join("")+
       `<td class="${n?"jNG":""}"><b>${n||""}</b></td><td>${rateTxt(r)}</td><td>${esc(r.freq)}</td><td>${esc(fixTxt(r))}</td><td style="text-align:left">${esc(r.note)}</td></tr>`); });
   $("tbody").innerHTML=(out.length?out.join(""):`<tr><td colspan="${TH.length}" class="small" style="padding:12px">まだ入力がありません</td></tr>`)+
@@ -667,8 +689,37 @@ $("works").addEventListener("click",async e=>{ if(VIEW) return; const box=e.targ
 $("btnAddEv").onclick=()=>{ if(VIEW||needInsp()) return; const ev={id:uid(),u:Date.now(),start:nowHM(),end:"",person:state.equip,content:"",action:""}; state.events.push(ev); save(); Sync.queue("event",ev.id); renderEvents(); };
 $("events").addEventListener("input",e=>{ if(VIEW) return; const box=e.target.closest(".ev"), k=e.target.dataset.ek; if(box&&k){ const ev=state.events[+box.dataset.e]; ev[k]=e.target.value; ev.u=Date.now(); save(); Sync.queue("event",ev.id); } });
 $("events").addEventListener("click",async e=>{ const d=e.target.dataset.del; if(d!=null&&!VIEW&&await askConfirm("この記録を削除しますか?")){ const ev=state.events[+d]; ev.del=true; ev.u=Date.now(); save(); Sync.queue("event",ev.id); renderEvents(); } });
+// v18：バリ取りのみ（検査はしない。不良が見つかったら不良として数える）
+$("btnBari").onclick=()=>{ if(VIEW||needInsp()) return; const r=state.rows[sel]; r.bari=!r.bari; if(r.bari&&!r.st) r.st=nowHM(); touchRow(sel); renderEntry(); refreshLight();
+  toast(r.bari?"✂ バリ取りのみにしました（総数は入れなくてよい・不良だけ入れる）":"検査にもどしました"); };
+// v18：前の日の検査未完了（開始があって終了が空）を、次の日の日報に候補として出す（全員分）
+let PEND=[], pendBusy=false;
+async function loadPend(){ const box=$("pendBox"); if(!box) return; if(VIEW||!state||state.date!==todayStr()||!Sync.on()){ box.hidden=true; return; } if(pendBusy) return; pendBusy=true;
+  try{ const c=Sync.getCfg(), d0=state.date, months=[d0.slice(0,7)]; { let [y,m]=d0.slice(0,7).split("-").map(Number); m--; if(m<1){ m=12; y--; } months.push(`${y}-${String(m).padStart(2,"0")}`); }
+    let days=[]; for(const m of months){ const j=await Sync.list(m); days=days.concat(j.days||[]); }
+    days=days.filter(x=>x.equip&&x.equip!=="未設定"&&!String(x.date).startsWith("_"));
+    const prev=days.filter(x=>x.date<d0).map(x=>x.date).sort().pop(); if(!prev){ PEND=[]; renderPend(); return; }
+    const getRows=async(date,e)=>{ const u=c.syncUrl+(c.syncUrl.includes("?")?"&":"?")+new URLSearchParams({action:"load",token:c.token,date,equip:e}); const j=await (await fetch(u,{redirect:"follow"})).json(); const rows=[]; (j.items||[]).forEach(it=>{ if(it.type==="row") rows[+it.ref]=it.raw||{}; }); return rows; };
+    const P=[]; for(const x of days.filter(x=>x.date===prev)){ try{ (await getRows(prev,x.equip)).forEach((r,i)=>{ if(r&&r.hin&&r.st&&!r.en&&!r.contDone) P.push({date:prev,equip:x.equip,no:i+1,r}); }); }catch(e){} }
+    // 今日の日報で、もう続きを入れたもの（だれの日報でも）
+    const used=new Set(); for(const x of days.filter(x=>x.date===d0&&x.equip!==state.equip)){ try{ (await getRows(d0,x.equip)).forEach(r=>{ if(r&&r.contFrom) used.add(r.contFrom); }); }catch(e){} }
+    state.rows.forEach(r=>{ if(r.contFrom) used.add(r.contFrom); });
+    PEND=P.map(p=>Object.assign(p,{done:[...used].some(k=>k===`${p.date}|${p.no}|${p.equip}`||(k===`${p.date}|${p.no}`&&p.equip===state.equip))}));
+    renderPend(); }
+  catch(e){} finally{ pendBusy=false; } }
+function renderPend(){ const box=$("pendBox"); if(!box) return; if(!PEND.length||!state||state.date!==todayStr()){ box.hidden=true; return; }
+  const md=d=>{ const [,m,dd]=d.split("-"); return `${+m}/${+dd}`; };
+  box.hidden=false; box.innerHTML=`<h3>⏸ 前の日（${md(PEND[0].date)}）に終わっていない検査 <span class="id">Belum selesai kemarin</span></h3>`+
+    PEND.map((p,k)=>`<div class="pi ${p.done?"done":""}"><b>${esc(p.equip)}</b><span>${p.r.bari?"✂バリ取り":"検査"}${p.no}</span><b>${esc(p.r.hin)}</b><span class="sm">${esc(p.r.lot||"")}　${esc(p.r.st)}〜（終了なし）${p.r.total?"　総数 "+esc(p.r.total):""}</span>`+
+      `<button data-pend="${k}" ${p.done?"disabled":""}>${p.done?"続きを入れ済み":"この続きを入れる"}</button></div>`).join(""); }
+$("pendBox").addEventListener("click",e=>{ const b=e.target.closest("[data-pend]"); if(!b||VIEW||needInsp()) return; const p=PEND[+b.dataset.pend]; if(!p||p.done) return;
+  let i=sel; if(rowHas(state.rows[i])) i=state.rows.findIndex(r=>!rowHas(r)); if(i<0){ toast("空いている記録がありません"); return; }
+  const r=state.rows[i]; ["hin","name","ok","lot","lot1","lot2","t1","t2","total","show2","bari"].forEach(k=>{ if(p.r[k]!=null) r[k]=p.r[k]; });
+  ["t1","t2","total","lot1","lot2"].forEach(k=>{ if(r[k]==null) r[k]=""; });
+  r.contFrom=`${p.date}|${p.no}|${p.equip}`; r.contNote=`${p.date.slice(5).replace("-","/")} ${p.equip} ${p.r.bari?"バリ取り":"検査"}${p.no}`; r.st=nowHM(); p.done=true;
+  sel=i; touchRow(i); renderAll(); renderPend(); toast(`${p.equip}さんの検査${p.no}（${p.r.hin}）の続きを${i+1}番に入れました`); });
 // 日付・作業者の切り替え
-function switchDay(){ const d=$("date").value, q=$("equip").value; if(!d||!q) return; load(d,q); sel=Math.max(0,state.rows.findIndex(r=>!rowHas(r))); renderAll(); Promise.resolve(Sync.pull()).then(carryOver); }
+function switchDay(){ const d=$("date").value, q=$("equip").value; if(!d||!q) return; load(d,q); sel=Math.max(0,state.rows.findIndex(r=>!rowHas(r))); renderAll(); PEND=[]; renderPend(); setTimeout(loadPend,1200); Promise.resolve(Sync.pull()).then(carryOver); }
 $("date").addEventListener("change",switchDay);
 $("equip").addEventListener("change",()=>{ if($("equip").value==="__add"){ const n=(prompt("検査員の名前を入れてください")||"").trim(); if(!n){ renderEquipSel(); return; }
     if(!(INSP.list||[]).includes(n)){ INSP={list:[...(INSP.list||[]).filter(Boolean),n],u:Date.now()}; LS.set(APP+":insp",INSP); Sync.queueInsp(); } renderEquipSel(); $("equip").value=n; toast("名前を追加しました（ほかの端末にも出ます）"); }
@@ -746,8 +797,8 @@ function ref(c,r){ return colName(c)+(r+1); }
 function asVal(v){ if(v===""||v==null) return null; if(typeof v==="number") return v; const s=String(v).trim(); if(/^-?\d+(\.\d+)?$/.test(s)) return parseFloat(s); return s; }
 // style registry
 const XS={fonts:['<font><sz val="11"/><name val="Meiryo UI"/></font>','<font><b/><sz val="11"/><name val="Meiryo UI"/></font>','<font><b/><sz val="11"/><color rgb="FFB00020"/><name val="Meiryo UI"/></font>','<font><b/><sz val="16"/><name val="Meiryo UI"/></font>','<font><sz val="9"/><color rgb="FF5D6778"/><name val="Meiryo UI"/></font>'],
-  fills:{none:0,gray:1,head:2,warn:3,ng:4,off:5,sel:6},
-  fillXml:['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFEEF1F6"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFFFF3C4"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFFFDCDC"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFE8EAEE"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFE3EEFF"/></patternFill></fill>'],
+  fills:{none:0,gray:1,head:2,warn:3,ng:4,off:5,sel:6,bari:7},
+  fillXml:['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFEEF1F6"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFFFF3C4"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFFFDCDC"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFE8EAEE"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFE3EEFF"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFFFE0B2"/></patternFill></fill>'],
   fmts:{gen:0,d2:164,d1:165}, xfs:[], map:{}};
 function st(o){ o=Object.assign({font:0,fill:"none",border:0,fmt:"gen",h:"",wrap:false},o||{});
   const k=JSON.stringify(o); if(XS.map[k]!=null) return XS.map[k];
@@ -812,10 +863,11 @@ function workbook(sheets){
 
 
 // ---- Excel ----
-const DATA_HEAD=["検査日","作業者","No","パレット内残品","検査開始","検査終了","ロット","品番","品名","マスター登録","総数",...DEFS.map(d=>d[1]),"不良数","不良率(%)","修正頻度","○(鋳コブ/バリ/焼き付き)","備考","記録確認","ロット区分"];
+const DATA_HEAD0=["検査日","作業者","No","パレット内残品","検査開始","検査終了","ロット","品番","品名","マスター登録","総数",...DEFS.map(d=>d[1]),"不良数","不良率(%)","修正頻度","○(鋳コブ/バリ/焼き付き)","備考","記録確認","ロット区分"];
+const DATA_HEAD=[...DATA_HEAD0,"区分"];
 function dataRows(){ const out=[DATA_HEAD];
   state.rows.forEach((r,i)=>{ if(!rowHas(r)) return; const x=rateOf(r);
-    lotInit(r); const base=(lot,t,d,n,rt,lk)=>[state.date,state.equip,i+1,r.pal,r.st,r.en,lot,r.hin,r.name,r.hin?(r.ok?"○":"×"):"",t,...DEFK.map(k=>d[k]),n||"",rt==null?"":rt,r.freq,fixTxt(r),r.note,state.confirmBy,lk];
+    lotInit(r); const base=(lot,t,d,n,rt,lk)=>[state.date,state.equip,i+1,r.pal,r.st,r.en,lot,r.hin,r.name,r.hin?(r.ok?"○":"×"):"",r.bari?"":t,...DEFK.map(k=>d[k]),n||"",(rt==null||r.bari)?"":rt,r.freq,fixTxt(r),r.note,state.confirmBy,lk,r.bari?"バリ取り":"検査"];
     if(r.lot2){ const d1=r.d1||r.d, d2=r.d2||{}; out.push(base(r.lot1,r.t1,d1,ngD(d1),rateD(d1,r.t1),"1")); out.push(base(r.lot2,r.t2,Object.assign(blankD(),d2),ngD(d2),rateD(d2,r.t2),"2")); }
     else out.push(base(r.lot,r.total,r.d,ngOf(r),x==null?null:Math.round(x*100)/100,"")); });
   return out; }
@@ -848,9 +900,10 @@ const sysDate=d=>String(d||"").replace(/-/g,"/");
 const SYS_DEF={kake:110,dakon:111,suna:112,hari:113,yaki:114,ire:115,kata:116,ware:117,yuzakai:118,hike:119,oshi:120,ikobu:121,shima:122};
 function csvRows(){ const out=[["検査日","作業者","品番コード","品番","品名","ロット","作業者","良品数",...DEFS.flatMap(d=>["コード",d[1]]),"ロット1","ロット1総数","ロット2","ロット2総数"]];
   const who=SysM.emp(state.equip);
-  state.rows.forEach(r=>{ if(!rowHas(r)) return; lotInit(r); syncLot(r);
+  state.rows.forEach(r=>{ if(!rowHas(r)) return; if(r.bari&&!ngOf(r)) return; lotInit(r); syncLot(r);
     const d=r.lot2?(()=>{ const s=blankD(), a=r.d1||r.d||{}, b=r.d2||{}; DEFK.forEach(k=>{ const x=(num(a[k])||0)+(num(b[k])||0); s[k]=x?String(x):""; }); return s; })():r.d;
     const s=SysM.hin(r.hin)||{};
+    if(r.bari){ out.push([sysDate(state.date),11,s.code||"",s.hin||r.hin,r.name,r.lot1||r.lot,who,0,...DEFK.flatMap(k=>{ const n=num(d[k]); return n?[SYS_DEF[k]||"",n]:["",""]; }),r.lot1,"",r.lot2,""]); return; }   // バリ取りのみ：良品数 0、不良だけ
     out.push([sysDate(state.date),11,s.code||"",s.hin||r.hin,r.name,r.lot1||r.lot,who,r.total,...DEFK.flatMap(k=>{ const n=num(d[k]); return n?[SYS_DEF[k]||"",n]:["",""]; }),r.lot1,r.lot1?(r.lot2?r.t1:r.total):"",r.lot2,r.lot2?r.t2:""]); });
   return out; }
 function workRows(){ const out=[["検査日","作業者","No","開始","終了","ほかの作業","ほかの工程","テスト","メモ"]]; liveWorks().forEach((w,i)=>out.push([state.date,state.equip,i+1,w.start,w.end,w.work,w.proc,w.test?"○":"",w.memo])); return out; }
@@ -865,12 +918,13 @@ function buildNippoSheet(){
   S.set(0,2,"いつもより不良数が多い時や割れを発見したときは、速やかに鋳造課長又は品質管理へ連絡すること。",st({font:2}));
   const r0=4; ["No","パレット残品","検査時刻","ロット","品番","品名","総数",...DEFS.map(d=>d[1]),"不良数","不良率","修正頻度","○","備考"].forEach((t,i)=>S.set(i,r0,t,H)); S.heights[r0]=32;
   let y=r0+1, tt=0, tn=0; const td={}; DEFK.forEach(k=>td[k]=0);
-  state.rows.forEach((r,i)=>{ if(!rowHas(r)) return; const n=ngOf(r); tt+=num(r.total)||0; tn+=n;
-    S.set(0,y,i+1,B); S.set(1,y,r.pal,r.pal==="NG"?NG:B); S.set(2,y,(r.st||r.en)?`${r.st}〜${r.en}`:"",B); S.set(3,y,r.lot,B); S.set(4,y,r.hin+(r.hin&&!r.ok&&MIDX.length?" *":""),st({border:1,h:"left"})); S.set(5,y,r.name,B); S.set(6,y,r.total,B);
-    DEFK.forEach((k,j)=>{ const v=num(r.d[k]); td[k]+=v||0; S.set(7+j,y,v||"",v?(k==="ware"?NG:WN):B); });
-    const c=7+DEFK.length; S.set(c,y,n||"",n?NG:B); const x=rateOf(r); S.set(c+1,y,x==null?"":(Math.round(x*100)/100)+"%",B); S.set(c+2,y,r.freq,B); S.set(c+3,y,fixTxt(r),B); S.set(c+4,y,r.note,BL); y++; });
+  const BB=st({border:1,h:"center",fill:"bari"}), BBL=st({border:1,h:"left",fill:"bari"}), BBW=st({border:1,h:"left",wrap:true,fill:"bari"}), BBT=st({font:1,border:1,h:"center",fill:"bari"}); let nb=0, nbn=0;
+  state.rows.forEach((r,i)=>{ if(!rowHas(r)) return; const n=ngOf(r), b=!!r.bari, B0=b?BB:B; if(b){ nb++; nbn+=n; } else tt+=num(r.total)||0; tn+=n;
+    S.set(0,y,i+1,B0); S.set(1,y,r.pal,r.pal==="NG"?NG:B0); S.set(2,y,(r.st||r.en)?`${r.st}〜${r.en}`:"",B0); S.set(3,y,r.lot,B0); S.set(4,y,r.hin+(r.hin&&!r.ok&&MIDX.length?" *":""),b?BBL:st({border:1,h:"left"})); S.set(5,y,r.name,B0); S.set(6,y,b?"バリ取り":r.total,b?BBT:B);
+    DEFK.forEach((k,j)=>{ const v=num(r.d[k]); td[k]+=v||0; S.set(7+j,y,v||"",v?(k==="ware"?NG:WN):B0); });
+    const c=7+DEFK.length; S.set(c,y,n||"",n?NG:B0); const x=rateOf(r); S.set(c+1,y,b?"":(x==null?"":(Math.round(x*100)/100)+"%"),B0); S.set(c+2,y,r.freq,B0); S.set(c+3,y,fixTxt(r),B0); S.set(c+4,y,(b?"バリ取りのみ（検査なし）":"")+(b&&r.note?"／":"")+(r.note||""),b?BBW:BL); y++; });
   const HS=st({font:1,border:1,h:"center",fill:"head"}); S.merge(0,y,5,y,"合計",HS); S.set(6,y,tt||"",HS); DEFK.forEach((k,j)=>S.set(7+j,y,td[k]||"",HS)); const c=7+DEFK.length;
-  S.set(c,y,tn||"",HS); S.set(c+1,y,tt?(Math.round(tn/tt*10000)/100)+"%":"",HS); S.merge(c+2,y,L,y,"",HS); y+=2;
+  S.set(c,y,tn||"",HS); S.set(c+1,y,tt?(Math.round((tn-nbn)/tt*10000)/100)+"%":"",HS); S.merge(c+2,y,L,y,nb?`うちバリ取り ${nb} 件・不良 ${nbn}`:"",nb?st({font:1,border:1,h:"center",fill:"bari"}):HS); y+=2;
   S.merge(0,y,L,y,"その他作業",st({font:1,fill:"head",border:1})); y++;
   S.merge(0,y,2,y,"時刻",H); S.merge(3,y,4,y,"ほかの作業",H); S.merge(5,y,8,y,"ほかの工程",H); S.merge(9,y,10,y,"テスト",H); S.merge(11,y,L,y,"メモ",H); y++;
   const WK=liveWorks(); (WK.length?WK:[{start:"",end:"",work:"",proc:"",test:false,memo:""}]).forEach(w=>{ S.merge(0,y,2,y,(w.start||w.end)?`${w.start}〜${w.end}`:"",B); S.merge(3,y,4,y,w.work,B); S.merge(5,y,8,y,w.proc,B); S.merge(9,y,10,y,w.test?"○":"",B); S.merge(11,y,L,y,w.memo,BL); y++; });
@@ -956,7 +1010,7 @@ var LotHelp=(function(){
   async function kMonth(m){ const o=kList[m]; if(o&&Date.now()-o.at<3*60*1000) return o.days; const j=await Sync.list(m); kList[m]={at:Date.now(),days:j.days||[]}; return kList[m].days; }
   async function kLoad(d,e){ const k=d+"|"+e, o=kDay[k]; if(o&&Date.now()-o.at<10*60*1000&&d<state.date) return o.rows; if(o&&Date.now()-o.at<3*60*1000) return o.rows; const c=Sync.getCfg();
     const j=await getJ(c.syncUrl,{action:"load",token:c.token,date:d,equip:e}); const rows=[]; (j.items||[]).forEach(it=>{ if(it.type==="row") rows[+it.ref]=it.raw||{}; }); kDay[k]={at:Date.now(),rows}; return rows; }
-  function rowLots(r){ if(r&&r.contFrom) return []; lotInit(r); const L=[]; if(r.lot2){ if(r.lot1) L.push([r.lot1,num(r.t1)]); L.push([r.lot2,num(r.t2)]); } else if(r.lot1) L.push([r.lot1,num(r.total)]); return L; }
+  function rowLots(r){ if(r&&(r.contFrom||r.bari)) return []; lotInit(r); const L=[]; if(r.lot2){ if(r.lot1) L.push([r.lot1,num(r.t1)]); L.push([r.lot2,num(r.t2)]); } else if(r.lot1) L.push([r.lot1,num(r.total)]); return L; }
   async function inspected(n,ld,skipSel){ let sum=0; const today=ymdL(new Date()), months=[]; { let [y,m]=ld.slice(0,7).split("-").map(Number); const end=today.slice(0,7); for(let k=0;k<24;k++){ const mm=`${y}-${String(m).padStart(2,"0")}`; months.push(mm); if(mm>=end) break; m++; if(m>12){ m=1; y++; } } }
     const L=[]; for(const m of (await Promise.all(months.map(kMonth)))) for(const x of m){ if(x.date<ld) continue; if(x.date===state.date&&x.equip===state.equip) continue; L.push(x); }
     const R=await pool(L.map(x=>()=>kLoad(x.date,x.equip)),6);
@@ -1002,7 +1056,7 @@ async function loadPack(){ if(!Sync.on()||navigator.onLine===false) return; try{
     if(it&&it.raw&&it.raw.rows){ PACK={rows:it.raw.rows,at:it.raw.at||Date.now()}; LS.set(APP+":pack",PACK); renderPack(); } }catch(e){} }
 function packOf(hin){ const n=normHin(hin); return n?(PACK.rows||{})[n]||null:null; }
 const packWarned=new WeakMap();
-function renderPack(){ const box=$("packNote"); if(!box||!state) return; const r=state.rows[sel]; if(!r||!r.hin||!Object.keys(PACK.rows||{}).length){ box.innerHTML=""; box.className="packnote"; return; }
+function renderPack(){ const box=$("packNote"); if(!box||!state) return; const r=state.rows[sel]; if(!r||r.bari||!r.hin||!Object.keys(PACK.rows||{}).length){ box.innerHTML=""; box.className="packnote"; return; }
   const p=packOf(r.hin); if(!p){ box.className="packnote"; box.innerHTML=`入り数マスターにない品番です（入り数の確認はできません）`; return; }
   const n=num(p.n), t=num(r.total);
   if(t==null){ box.className="packnote"; box.innerHTML=`この品番の入り数：<b>${n}</b> 個 / Isi palet`; return; }
@@ -1187,7 +1241,7 @@ sel=Math.max(0,state.rows.findIndex(r=>!rowHas(r)));
 renderAll();
 if(VIEW){ $("viewBadge").hidden=false; document.title="検査日報（閲覧用）"; document.querySelectorAll("#entryCard input,#entryCard textarea,.card input").forEach(el=>el.readOnly=true); }
 if(!VIEW&&!inspList().length) setTimeout(()=>toast("「設定」→「検査員の名前」で5人の名前を登録してください"),800);
-Sync.status(); Sync.flush().then(()=>Sync.pull()).then(()=>{ if(!/[?&]export=/.test(location.search)){ carryOver(); loadPack(); loadInspSeen(); } }); Sync.loadMaster(false);
+Sync.status(); Sync.flush().then(()=>Sync.pull()).then(()=>{ if(!/[?&]export=/.test(location.search)){ carryOver(); loadPack(); loadInspSeen(); setTimeout(loadPend,1500); } }); Sync.loadMaster(false);
 const EXP={csv:()=>csvRows(), master:async()=>{ await Sync.loadMaster(true); await SysM.load(); }, load:(d,q)=>load(d,q), empty:()=>!state.rows.some(rowHas)&&!liveEvents().length&&!liveWorks().length, name:()=>"検査日報_"+state.equip.replace(/[\\/:*?"<>|（）() ]/g,"")+"_"+state.date.replace(/-/g,"")+".xlsx"};
 // ---- 自動Excel出力（URL末尾に ?export=開始日..終了日 を付けて開くと、その期間の日報Excelを作って画面に埋め込む）----
 (async function(){
