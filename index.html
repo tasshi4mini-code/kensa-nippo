@@ -443,7 +443,12 @@ let state, sel=0;
 
 // ---- 検査員の名前（全端末共通の設定） ----
 let INSP=LS.get(APP+":insp",{list:CFG.inspectors||[],u:0});
-function inspList(){ return (INSP.list||[]).filter(Boolean); }
+// v17：登録した名前＋「今月・先月に日報がある人」も出す（ほかの端末で追加した名前も出るように）
+let INSP_SEEN=LS.get(APP+":inspSeen",[]);
+function inspList(){ const L=(INSP.list||[]).filter(Boolean); (INSP_SEEN||[]).forEach(n=>{ if(n&&!L.includes(n)) L.push(n); }); return L; }
+async function loadInspSeen(){ try{ if(!Sync.on()) return; const d=new Date(), m0=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`, p=new Date(d.getFullYear(),d.getMonth()-1,1), m1=`${p.getFullYear()}-${String(p.getMonth()+1).padStart(2,"0")}`;
+    const S=new Set(); for(const m of [m0,m1]){ const j=await Sync.list(m); (j.days||[]).forEach(x=>{ const e=String(x.equip||"").trim(); if(e&&e!=="未設定"&&e!=="_global"&&e!=="sysm"&&e!=="pack") S.add(e); }); }
+    const L=[...S].sort(); if(JSON.stringify(L)!==JSON.stringify(INSP_SEEN)){ INSP_SEEN=L; LS.set(APP+":inspSeen",L); if(state) renderEquipSel(); } }catch(e){} }
 
 // ---- 品番マスター ----
 let MASTER=LS.get(APP+":master",{rows:[],at:0});
@@ -666,7 +671,7 @@ $("events").addEventListener("click",async e=>{ const d=e.target.dataset.del; if
 function switchDay(){ const d=$("date").value, q=$("equip").value; if(!d||!q) return; load(d,q); sel=Math.max(0,state.rows.findIndex(r=>!rowHas(r))); renderAll(); Promise.resolve(Sync.pull()).then(carryOver); }
 $("date").addEventListener("change",switchDay);
 $("equip").addEventListener("change",()=>{ if($("equip").value==="__add"){ const n=(prompt("検査員の名前を入れてください")||"").trim(); if(!n){ renderEquipSel(); return; }
-    if(!inspList().includes(n)){ INSP={list:[...inspList(),n],u:INSP.u}; LS.set(APP+":insp",INSP); } renderEquipSel(); $("equip").value=n; toast("全端末に名前を登録するときは「設定」→「検査員の名前」から保存してください"); }
+    if(!(INSP.list||[]).includes(n)){ INSP={list:[...(INSP.list||[]).filter(Boolean),n],u:Date.now()}; LS.set(APP+":insp",INSP); Sync.queueInsp(); } renderEquipSel(); $("equip").value=n; toast("名前を追加しました（ほかの端末にも出ます）"); }
   switchDay(); });
 // 設定
 $("btnSettings").onclick=()=>{ renderMasterStat(); updateDirInfo(); $("inspList").value=inspList().join("\n"); $("inspInfo").textContent=""; const c=Sync.getCfg(); $("cfgUrl").value=c.syncUrl||""; $("cfgToken").value=c.token||""; $("cfgInfo").textContent=""; $("dlgSettings").showModal(); };
@@ -1182,7 +1187,7 @@ sel=Math.max(0,state.rows.findIndex(r=>!rowHas(r)));
 renderAll();
 if(VIEW){ $("viewBadge").hidden=false; document.title="検査日報（閲覧用）"; document.querySelectorAll("#entryCard input,#entryCard textarea,.card input").forEach(el=>el.readOnly=true); }
 if(!VIEW&&!inspList().length) setTimeout(()=>toast("「設定」→「検査員の名前」で5人の名前を登録してください"),800);
-Sync.status(); Sync.flush().then(()=>Sync.pull()).then(()=>{ if(!/[?&]export=/.test(location.search)){ carryOver(); loadPack(); } }); Sync.loadMaster(false);
+Sync.status(); Sync.flush().then(()=>Sync.pull()).then(()=>{ if(!/[?&]export=/.test(location.search)){ carryOver(); loadPack(); loadInspSeen(); } }); Sync.loadMaster(false);
 const EXP={csv:()=>csvRows(), master:async()=>{ await Sync.loadMaster(true); await SysM.load(); }, load:(d,q)=>load(d,q), empty:()=>!state.rows.some(rowHas)&&!liveEvents().length&&!liveWorks().length, name:()=>"検査日報_"+state.equip.replace(/[\\/:*?"<>|（）() ]/g,"")+"_"+state.date.replace(/-/g,"")+".xlsx"};
 // ---- 自動Excel出力（URL末尾に ?export=開始日..終了日 を付けて開くと、その期間の日報Excelを作って画面に埋め込む）----
 (async function(){
