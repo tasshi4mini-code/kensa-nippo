@@ -1010,7 +1010,12 @@ var LotHelp=(function(){
   async function kMonth(m){ const o=kList[m]; if(o&&Date.now()-o.at<3*60*1000) return o.days; const j=await Sync.list(m); kList[m]={at:Date.now(),days:j.days||[]}; return kList[m].days; }
   async function kLoad(d,e){ const k=d+"|"+e, o=kDay[k]; if(o&&Date.now()-o.at<10*60*1000&&d<state.date) return o.rows; if(o&&Date.now()-o.at<3*60*1000) return o.rows; const c=Sync.getCfg();
     const j=await getJ(c.syncUrl,{action:"load",token:c.token,date:d,equip:e}); const rows=[]; (j.items||[]).forEach(it=>{ if(it.type==="row") rows[+it.ref]=it.raw||{}; }); kDay[k]={at:Date.now(),rows}; return rows; }
-  function rowLots(r){ if(r&&(r.contFrom||r.bari)) return []; lotInit(r); const L=[]; if(r.lot2){ if(r.lot1) L.push([r.lot1,num(r.t1)]); L.push([r.lot2,num(r.t2)]); } else if(r.lot1) L.push([r.lot1,num(r.total)]); return L; }
+  // v21：検査済みの数は「総数（良品）＋ 不良数」。ロットが2つのときは、ロットごとの不良（d1・d2）を足す
+  const ngD=o=>DEFK.reduce((a,k)=>a+(num((o||{})[k])||0),0);
+  function rowLots(r){ if(r&&(r.contFrom||r.bari)) return []; lotInit(r); const L=[];
+    if(r.lot2){ const has=r.d1||r.d2, n1=has?ngD(r.d1):ngD(r.d), n2=has?ngD(r.d2):0;
+      if(r.lot1) L.push([r.lot1,(num(r.t1)||0)+n1]); L.push([r.lot2,(num(r.t2)||0)+n2]); }
+    else if(r.lot1) L.push([r.lot1,(num(r.total)||0)+ngD(r.d)]); return L; }
   async function inspected(n,ld,skipSel){ let sum=0; const today=ymdL(new Date()), months=[]; { let [y,m]=ld.slice(0,7).split("-").map(Number); const end=today.slice(0,7); for(let k=0;k<24;k++){ const mm=`${y}-${String(m).padStart(2,"0")}`; months.push(mm); if(mm>=end) break; m++; if(m>12){ m=1; y++; } } }
     const L=[]; for(const m of (await Promise.all(months.map(kMonth)))) for(const x of m){ if(x.date<ld) continue; if(x.date===state.date&&x.equip===state.equip) continue; L.push(x); }
     const R=await pool(L.map(x=>()=>kLoad(x.date,x.equip)),6);
@@ -1025,15 +1030,15 @@ var LotHelp=(function(){
       for(const x of L){ const ins=await inspected(n,x.d,-1); if(my!==seq) return; items.push(Object.assign({ins},x)); }
       lotInit(r); const cur=[r.lot1,r.lot2].filter(Boolean);
       cand.innerHTML=L.length?`<div class="lch">この品番の最近のロット（造型日報・新しい順）タップでロットに入ります / Lot terbaru</div><div class="lcg">`+items.map(x=>{ const lot=lotFromDate(x.d), rest=x.qty-x.ins;
-          return `<button data-cl="${x.d}" class="${cur.includes(lot)?"on":""} ${rest<=0?"full":""}" ${VIEW?"disabled":""}><b>${esc(lot)}</b><small>${md(x.d)} 造型 ${x.qty}個 ／ 検査済み ${x.ins}個${rest>0?`（残り ${rest}個）`:"（検査ずみ）"}</small></button>`; }).join("")+`</div>`
+          return `<button data-cl="${x.d}" class="${cur.includes(lot)?"on":""} ${rest<=0?"full":""}" ${VIEW?"disabled":""}><b>${esc(lot)}</b><small>${md(x.d)} 造型 ${x.qty}個 ／ 検査済み ${x.ins}個（不良含む）${rest>0?`（残り ${rest}個）`:"（検査ずみ）"}</small></button>`; }).join("")+`</div>`
         :`<div class="lch" style="color:#b00020">直近${DEEP}日の造型日報にこの品番がありません。現品票のロットを確認してください</div>`;
       // 造型数と検査数
       const msgs=[]; let lv="ok";
       for(const [l,q] of rowLots(r)){ const ld=dateFromLot(l); if(!ld) continue; let o=await zDay(ld); if(my!==seq) return; if(!o[n]){ o=await zDay(ld,true); if(my!==seq) return; } const made=o[n]||0;
         if(!made){ msgs.push(`⚠ ロット ${esc(l)}（${md(ld)}）にこの品番の造型の記録がありません。ロットを確認してください`); if(lv!=="ng") lv="warn"; continue; }
         const others=await inspected(n,ld,sel); if(my!==seq) return; const tot=others+(q||0);
-        if(tot>made){ msgs.push(`⚠ 検査数が造型数を超えています：ロット ${esc(l)}　造型 ${made}個 ／ 検査 ${tot}個（この検査 ${q||0}個を含む・${tot-made}個多い）`); lv="ng"; }
-        else msgs.push(`ロット ${esc(l)}：造型 ${made}個 ／ 検査 ${tot}個（残り ${made-tot}個）`); }
+        if(tot>made){ msgs.push(`⚠ 検査数が造型数を超えています：ロット ${esc(l)}　造型 ${made}個 ／ 検査 ${tot}個（不良を含む。この検査 ${q||0}個を含む・${tot-made}個多い）`); lv="ng"; }
+        else msgs.push(`ロット ${esc(l)}：造型 ${made}個 ／ 検査 ${tot}個（不良を含む。残り ${made-tot}個）`); }
       err.className="loterr "+(msgs.length?lv:""); err.innerHTML=msgs.join("<br>");
       if(lv==="ng"&&ngShown.get(r)!==err.innerHTML){ ngShown.set(r,err.innerHTML); toast("⚠ 検査数が造型数を超えています。ロットと総数を確認してください"); }
     }catch(e){ if(my!==seq) return; cand.innerHTML=`<div class="lch">ロットの候補を読み込めませんでした（${esc(e.message||e)}）</div>`; } }
