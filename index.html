@@ -519,7 +519,8 @@ function liveWorks(){ return state.works.filter(w=>!w.del); }
 function num(v){ if(v===""||v==null) return null; const n=parseFloat(String(v).replace(/[，,]/g,".").replace(/[０-９．]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))); return isNaN(n)?null:n; }
 function fmtNum(n){ return Math.round(n*1000)/1000+""; }
 function ngOf(r){ return DEFK.reduce((a,k)=>a+(num(r.d[k])||0),0); }
-function rateOf(r){ if(r.bari) return null; const t=num(r.total), n=ngOf(r); return t?n/t*100:null; }
+// v22：不良率＝不良数 ÷（良品数＝総数 ＋ 不良数）
+function rateOf(r){ if(r.bari) return null; const t=num(r.total)||0, n=ngOf(r); return (t+n)?n/(t+n)*100:null; }
 function rateTxt(r){ const x=rateOf(r); return x==null?"":(Math.round(x*100)/100)+"%"; }
 function fixTxt(r){ return Object.keys(FIXL).filter(k=>r.fix[k]).map(k=>FIXL[k]).join("・"); }
 function ngDetail(r){ return DEFK.filter(k=>num(r.d[k])).map(k=>`${DEFL[k]}${r.d[k]}`).join("・"); }
@@ -582,14 +583,14 @@ function updateMarks(){ const r=state.rows[sel];
 const TH=["No","パレット<br>残品","検査時刻","ロット","品番","品名","総数",...DEFS.map(d=>d[1].replace("/","/<br>")),"不良数","不良率","修正頻度","○","備考"];
 function renderTable(){
   $("thead").innerHTML=TH.map(t=>`<th>${t}</th>`).join("");
-  const out=[]; let tt=0, tn=0; const td={}; DEFK.forEach(k=>td[k]=0);
-  state.rows.forEach((r,i)=>{ if(!rowHas(r)) return; const n=ngOf(r); if(!r.bari) tt+=num(r.total)||0; tn+=n; DEFK.forEach(k=>td[k]+=num(r.d[k])||0);
+  const out=[]; let tt=0, tn=0, tbn=0; const td={}; DEFK.forEach(k=>td[k]=0);
+  state.rows.forEach((r,i)=>{ if(!rowHas(r)) return; const n=ngOf(r); if(!r.bari) tt+=num(r.total)||0; else tbn+=n; tn+=n; DEFK.forEach(k=>td[k]+=num(r.d[k])||0);
     out.push(`<tr data-i="${i}" class="${i===sel?"sel":""} ${r.bari?"bari":""}"><td class="no"><b>${i+1}</b></td><td class="${r.pal==="NG"?"jNG":""}">${esc(r.pal)}</td><td style="white-space:nowrap">${esc(r.st)}${(r.st||r.en)?"〜":""}${esc(r.en)}</td><td style="white-space:nowrap">${r.lot2?`${esc(r.lot1)} <small>(${esc(r.t1||0)})</small><br>${esc(r.lot2)} <small>(${esc(r.t2||0)})</small>`:esc(r.lot)}</td>`+
       `<td style="white-space:nowrap">${esc(r.hin)}${r.hin&&!r.ok&&MIDX.length?' <span style="color:#c62828">*</span>':""}</td><td>${esc(r.name)}</td><td><b>${r.bari?'<span style="color:#ef6c00">✂バリ取り</span>':esc(r.total)}</b></td>`+
       DEFK.map(k=>`<td class="${num(r.d[k])?(k==="ware"?"jNG":"warn"):""}">${num(r.d[k])?r.d[k]:""}</td>`).join("")+
       `<td class="${n?"jNG":""}"><b>${n||""}</b></td><td>${rateTxt(r)}</td><td>${esc(r.freq)}</td><td>${esc(fixTxt(r))}</td><td style="text-align:left">${esc(r.note)}</td></tr>`); });
   $("tbody").innerHTML=(out.length?out.join(""):`<tr><td colspan="${TH.length}" class="small" style="padding:12px">まだ入力がありません</td></tr>`)+
-    `<tr class="sum"><td colspan="6">合計 <span class="id">Total</span></td><td>${tt||""}</td>${DEFK.map(k=>`<td>${td[k]||""}</td>`).join("")}<td>${tn||""}</td><td>${tt?(Math.round(tn/tt*10000)/100)+"%":""}</td><td colspan="3"></td></tr>`;
+    `<tr class="sum"><td colspan="6">合計 <span class="id">Total</span></td><td>${tt||""}</td>${DEFK.map(k=>`<td>${td[k]||""}</td>`).join("")}<td>${tn||""}</td><td>${(tt+tn-tbn)?(Math.round((tn-tbn)/(tt+tn-tbn)*10000)/100)+"%":""}</td><td colspan="3"></td></tr>`;
 }
 function renderWorks(){ const W=liveWorks();
   if(!W.length){ $("works").innerHTML='<div class="small" style="margin-bottom:10px">記録なし</div>'; return; }
@@ -924,7 +925,7 @@ function buildNippoSheet(){
     DEFK.forEach((k,j)=>{ const v=num(r.d[k]); td[k]+=v||0; S.set(7+j,y,v||"",v?(k==="ware"?NG:WN):B0); });
     const c=7+DEFK.length; S.set(c,y,n||"",n?NG:B0); const x=rateOf(r); S.set(c+1,y,b?"":(x==null?"":(Math.round(x*100)/100)+"%"),B0); S.set(c+2,y,r.freq,B0); S.set(c+3,y,fixTxt(r),B0); S.set(c+4,y,(b?"バリ取りのみ（検査なし）":"")+(b&&r.note?"／":"")+(r.note||""),b?BBW:BL); y++; });
   const HS=st({font:1,border:1,h:"center",fill:"head"}); S.merge(0,y,5,y,"合計",HS); S.set(6,y,tt||"",HS); DEFK.forEach((k,j)=>S.set(7+j,y,td[k]||"",HS)); const c=7+DEFK.length;
-  S.set(c,y,tn||"",HS); S.set(c+1,y,tt?(Math.round((tn-nbn)/tt*10000)/100)+"%":"",HS); S.merge(c+2,y,L,y,nb?`うちバリ取り ${nb} 件・不良 ${nbn}`:"",nb?st({font:1,border:1,h:"center",fill:"bari"}):HS); y+=2;
+  S.set(c,y,tn||"",HS); S.set(c+1,y,(tt+tn-nbn)?(Math.round((tn-nbn)/(tt+tn-nbn)*10000)/100)+"%":"",HS); S.merge(c+2,y,L,y,nb?`うちバリ取り ${nb} 件・不良 ${nbn}`:"",nb?st({font:1,border:1,h:"center",fill:"bari"}):HS); y+=2;
   S.merge(0,y,L,y,"その他作業",st({font:1,fill:"head",border:1})); y++;
   S.merge(0,y,2,y,"時刻",H); S.merge(3,y,4,y,"ほかの作業",H); S.merge(5,y,8,y,"ほかの工程",H); S.merge(9,y,10,y,"テスト",H); S.merge(11,y,L,y,"メモ",H); y++;
   const WK=liveWorks(); (WK.length?WK:[{start:"",end:"",work:"",proc:"",test:false,memo:""}]).forEach(w=>{ S.merge(0,y,2,y,(w.start||w.end)?`${w.start}〜${w.end}`:"",B); S.merge(3,y,4,y,w.work,B); S.merge(5,y,8,y,w.proc,B); S.merge(9,y,10,y,w.test?"○":"",B); S.merge(11,y,L,y,w.memo,BL); y++; });
