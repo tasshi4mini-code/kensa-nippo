@@ -51,6 +51,29 @@ input:focus,textarea:focus{outline:3px solid #9cc0f5;border-color:var(--pri)}
 .chip.filled{background:var(--ok);color:var(--ok-ink);border-color:#9fd3b1}
 .chip.warn{background:var(--warn);color:var(--warn-ink);border-color:#e5c95a}
 .chip.ng{background:var(--ng);color:var(--ng-ink);border-color:#f19999}
+/* v26：総数・ロットの不備 */
+.chip.miss{background:#ffebee;color:#b00020;border:2px solid #d50000;font-weight:bold}
+.chip.miss small::after{content:" ⚠不備"}
+td.miss{background:#ffebee!important;color:#b00020;font-weight:bold}
+input.missin{border:2px solid #d50000!important;background:#fff1f1!important;color:#b00020!important}
+.missnote{margin-top:6px;font-size:22px;font-weight:bold;color:#fff;background:#d50000;border-radius:10px;padding:8px 12px;line-height:1.35}
+.missnote small{display:block;font-size:14px;font-weight:normal}
+.missnote.soft{background:#d50000}
+.missbar{background:#d50000;color:#fff;border-radius:12px;padding:12px 14px;margin-bottom:12px;font-weight:bold;font-size:22px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;animation:missbl 1.2s ease-in-out infinite alternate}
+@keyframes missbl{to{box-shadow:0 0 0 5px rgba(213,0,0,.35)}}
+.missbar button{min-height:48px;border-radius:10px;border:2px solid #fff;background:#fff;color:#b00020;font-weight:bold;font-size:18px;padding:0 14px}
+.chip.miss{background:#d50000!important;color:#fff!important;border-color:#d50000!important}
+input.missin{border:3px solid #d50000!important}
+#dlgMiss{padding:0;border:0;background:transparent;max-width:600px}
+#dlgMiss .dlg{max-width:560px;border:4px solid #d50000;border-radius:14px;background:#fff}
+#toast.missred{background:#d50000!important;color:#fff!important;font-size:22px!important;font-weight:bold;padding:14px 20px!important}
+#dlgMiss h3{margin:0 0 6px;font-size:28px;color:#d50000}
+#dlgMiss .mt{font-size:22px;font-weight:bold;color:#b00020;line-height:1.5}
+#dlgMiss .ms{font-size:15px;color:#5d6778;margin-top:6px}
+#dlgMiss .bt{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+#dlgMiss .bt button{flex:1 1 200px;min-height:60px;font-size:19px;font-weight:bold;border-radius:12px}
+#dlgMiss #mBack{background:#d50000;color:#fff;border:0}
+.missbar[hidden]{display:none}
 .chip.off{background:var(--off);color:#8a93a3}
 .chip.sel{outline:4px solid var(--pri);outline-offset:1px}
 .chip.now::after{content:"現在";position:absolute;top:-8px;right:-4px;background:#e67e22;color:#fff;font-size:10px;padding:1px 4px;border-radius:4px}
@@ -287,6 +310,7 @@ tr.bari td{background:#fff3e0}
   </section>
 
   <section class="card" id="entryCard">
+    <div class="missbar" id="missBar" hidden></div>
     <div class="eh">
       <div class="bigno" id="bigNo">検査 1</div>
       <div class="contbar" id="contBar" hidden></div>
@@ -420,6 +444,12 @@ tr.bari td{background:#fff3e0}
   <div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="pri" onclick="this.closest('dialog').close()">閉じる</button></div>
 </div></dialog>
 
+<dialog id="dlgMiss"><div class="dlg">
+  <h3>⚠ 不備があります</h3>
+  <div class="mt" id="mTxt"></div>
+  <div class="ms">Ada data yang belum diisi</div>
+  <div class="bt"><button id="mBack">戻って入力する<br><small style="font-weight:normal">Kembali dan isi</small></button><button id="mGo">このまま進む（あとで入れる）<br><small style="font-weight:normal">Lanjut</small></button></div>
+</div></dialog>
 <dialog id="dlgConfirm"><div class="dlg">
   <p id="cfMsg" style="font-size:17px;margin:4px 0 18px;white-space:pre-line"></p>
   <div style="display:flex;justify-content:flex-end;gap:8px"><button id="cfNo">キャンセル</button><button class="pri" id="cfYes">OK</button></div>
@@ -538,7 +568,7 @@ function renderEquipSel(){ const list=inspList(), cur=state?state.equip:defaultE
   $("equip").style.outline=cur===NOSEL?"3px solid #ffeb3b":""; }
 function needInsp(){ if(state.equip!==NOSEL) return false; toast("先に画面上の「作業者」で自分の名前を選んでください / Pilih nama Anda dulu"); $("equip").focus(); return true; }
 function renderChips(){ $("chips").innerHTML=state.rows.map((r,i)=>r.bari?`<button class="chip bari ${ngOf(r)?"ng":""} ${i===sel?"sel":""}" data-i="${i}">✂バリ取り${i+1}<small>${esc(r.hin||"－")}${ngOf(r)?" NG"+ngOf(r):""}</small></button>`
-    :`<button class="chip ${isBad(r)?"ng":(rowHas(r)?"filled":"")} ${i===sel?"sel":""}" data-i="${i}">検査${i+1}<small>${esc(r.hin||"－")}</small></button>`).join(""); }
+    :`<button class="chip ${missShow(i)?"miss":(isBad(r)?"ng":(rowHas(r)?"filled":""))} ${i===sel?"sel":""}" data-i="${i}">検査${i+1}<small>${esc(r.hin||"－")}</small></button>`).join(""); }
 function renderHeader(){ $("date").value=state.date; renderEquipSel(); $("inspName").textContent=state.equip; $("confirmBy").value=state.confirmBy; renderMasterStat(); }
 function renderMasterStat(){ const n=MIDX.length, at=MASTER.at?new Date(MASTER.at):null;
   const t=n?`品番マスター：${n}件` + (at?`（${at.getMonth()+1}/${at.getDate()} ${at.getHours()}:${String(at.getMinutes()).padStart(2,"0")} 読込）`:"") : "品番マスターが未登録です（設定 → マスターをExcelから更新）";
@@ -566,7 +596,7 @@ function renderEntry(){ const r=state.rows[sel];
     n.innerHTML="✂ バリ取りのみ（検査はしていない）：総数は入れなくてよい。バリ取り中に見つけた不良だけ入れてください / Hanya buang burr: masukkan cacat saja"; }
   document.querySelectorAll("#entryCard [data-k]").forEach(inp=>{ const k=inp.dataset.k; inp.value=r[k]||"";
     if(k==="lot"&&!r.lot){ const p=prevLot(sel); inp.placeholder=p?"前回 "+p:"例 C26-9-23"; } });
-  const [c,t]=hinStatus(r); $("hinSt").className="hinst "+c; $("hinSt").textContent=t;
+  const [c,t]=hinStatus(r); $("hinSt").className="hinst "+c; $("hinSt").textContent=t; renderMiss();
   renderLots(); renderDefs(); updateMarks(); }
 function prevLot(i){ for(let j=i-1;j>=0;j--){ const r=state.rows[j]; lotInit(r); if(r.lot1) return r.lot2||r.lot1; } return ""; }
 function renderLots(){ const r=state.rows[sel]; lotInit(r); const two=!!r.lot2||r.show2;
@@ -589,7 +619,7 @@ function renderTable(){
   const out=[]; let tt=0, tn=0, tbn=0; const td={}; DEFK.forEach(k=>td[k]=0);
   state.rows.forEach((r,i)=>{ if(!rowHas(r)) return; const n=ngOf(r); if(!r.bari) tt+=num(r.total)||0; else tbn+=n; tn+=n; DEFK.forEach(k=>td[k]+=num(r.d[k])||0);
     out.push(`<tr data-i="${i}" class="${i===sel?"sel":""} ${r.bari?"bari":""}"><td class="no"><b>${i+1}</b></td><td class="${r.pal==="NG"?"jNG":""}">${esc(r.pal)}</td><td style="white-space:nowrap">${esc(r.st)}${(r.st||r.en)?"〜":""}${esc(r.en)}</td><td style="white-space:nowrap">${r.lot2?`${esc(r.lot1)} <small>(${esc(r.t1||0)})</small><br>${esc(r.lot2)} <small>(${esc(r.t2||0)})</small>`:esc(r.lot)}</td>`+
-      `<td style="white-space:nowrap">${esc(r.hin)}${r.hin&&!r.ok&&MIDX.length?' <span style="color:#c62828">*</span>':""}</td><td>${esc(r.name)}</td><td><b>${r.bari?'<span style="color:#ef6c00">✂バリ取り</span>':esc(r.total)}</b></td>`+
+      `<td style="white-space:nowrap" class="${missShow(i)?"miss":""}">${missShow(i)?"⚠ ":""}${esc(r.hin)}${missShow(i)?`<br><small>${missK(r).join("・")}がありません</small>`:""}${r.hin&&!r.ok&&MIDX.length?' <span style="color:#c62828">*</span>':""}</td><td>${esc(r.name)}</td><td><b>${r.bari?'<span style="color:#ef6c00">✂バリ取り</span>':esc(r.total)}</b></td>`+
       DEFK.map(k=>`<td class="${num(r.d[k])?(k==="ware"?"jNG":"warn"):""}">${num(r.d[k])?r.d[k]:""}</td>`).join("")+
       `<td class="${n?"jNG":""}"><b>${n||""}</b></td><td>${rateTxt(r)}</td><td>${esc(r.freq)}</td><td>${esc(fixTxt(r))}</td><td style="text-align:left">${esc(r.note)}</td></tr>`); });
   $("tbody").innerHTML=(out.length?out.join(""):`<tr><td colspan="${TH.length}" class="small" style="padding:12px">まだ入力がありません</td></tr>`)+
@@ -624,6 +654,25 @@ function askConfirm(msg){ return new Promise(res=>{ const d=$("dlgConfirm"); $("
   $("cfYes").onclick=()=>done(true); $("cfNo").onclick=()=>done(false); d.onclose=()=>done(false); d.showModal(); }); }
 function nowHM(){ const d=new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
 function selectRow(i){ hideSugg(); curLot=1; sel=(i+NR())%NR(); renderChips(); renderEntry(); renderTable(); }
+// ---- v26：総数・ロットが入っていない（不備）検査を、品番を赤くして知らせる。次の製品に移るときは警告 ----
+function missK(r){ if(!r||r.bari||r.contFrom||!String(r.hin||"").trim()) return []; const m=[]; if(num(r.total)==null) m.push("総数"); if(!String(r.lot||"").trim()&&!String(r.lot1||"").trim()) m.push("ロット"); return m; }
+function missShow(i){ const r=state.rows[i]; if(!missK(r).length) return false; if(i!==sel) return true; return state.rows.some((x,j)=>j>i&&rowHas(x)); }   // 入力中の行は、あとの行に入力があるときだけ赤
+function missOthers(){ return state.rows.map((r,i)=>({i,r,m:missK(r)})).filter(x=>x.m.length&&x.i!==sel); }
+function renderMiss(){ if(!state) return; const r=state.rows[sel], m=missK(r), red=missShow(sel);
+  hinInp.classList.toggle("missin",red); let n=$("missNote"); if(!n){ n=document.createElement("div"); n.id="missNote"; $("hinSt").after(n); }
+  n.className="missnote"+(red?"":" soft"); n.hidden=!m.length; n.innerHTML=m.length?`⚠ ${m.join("・")}が入っていません<small>${m.map(x=>x==="総数"?"Jumlah total":"Lot").join("・")} belum diisi</small>`:"";
+  const O=missOthers(), b=$("missBar"); b.hidden=!O.length||VIEW;
+  b.innerHTML=O.length?`⚠ 不備があります：`+O.map(x=>`<button type="button" data-mi="${x.i}">検査${x.i+1} ${esc(x.r.hin)}（${x.m.join("・")}）</button>`).join(""):""; }
+$("missBar").addEventListener("click",e=>{ const b=e.target.closest("[data-mi]"); if(b){ selectRow(+b.dataset.mi); window.scrollTo({top:$("entryCard").offsetTop-70,behavior:"smooth"}); } });
+let missWarned="";
+function missStartWarn(){ const O=missOthers().filter(x=>x.i<sel); if(!O.length) return; const k=sel+"|"+O.map(x=>x.i).join(","); if(missWarned===k) return; missWarned=k;
+  toast(`⚠ 前の検査に不備があります：`+O.map(x=>`検査${x.i+1}（${x.m.join("・")}）`).join("・")); const t=$("toast"); t.classList.add("missred"); clearTimeout(t._mr); t._mr=setTimeout(()=>t.classList.remove("missred"),3200); }
+function missAsk(i,r,m){ return new Promise(res=>{ const d=$("dlgMiss"); $("mTxt").innerHTML=`検査${i+1}（${esc(r.hin)}）<br>${m.join("・")}が入っていません`;
+  const done=v=>{ $("mBack").onclick=$("mGo").onclick=null; d.onclose=null; if(d.open) d.close(); res(v); }; $("mBack").onclick=()=>done(false); $("mGo").onclick=()=>done(true); d.onclose=()=>done(false); d.showModal(); }); }
+const _selectRow=selectRow;
+selectRow=async function(i){ const to=(i+NR())%NR(), cur=state.rows[sel], m=missK(cur);
+  if(!VIEW&&to!==sel&&m.length){ const ok=await missAsk(sel,cur,m); if(!ok){ renderMiss(); const k=m[0]==="総数"?"total":"lot"; const el=document.querySelector(`#entryCard [data-k="${k}"]`); if(el){ el.scrollIntoView({block:"center"}); el.focus(); } return; } }
+  _selectRow(i); };
 function touchRow(i){ if(VIEW) return; state.rows[i].u=Date.now(); if(needInsp()) return; if(ensureRows()) setTimeout(renderChips,0); save(); Sync.queue("row",i); }
 function touchHeader(){ if(VIEW) return; state.hu=Date.now(); if(needInsp()) return; save(); Sync.queue("header",""); }
 
@@ -638,7 +687,7 @@ function hideSugg(){ suggBox.hidden=true; suggBox.innerHTML=""; sugg={list:[],ac
 function pickMaster(m){ const r=state.rows[sel]; r.hin=m.hin; r.name=m.name||""; r.ok=true; hideSugg(); touchRow(sel); renderEntry(); refreshLight();
   if(m.check) toast("⚠ 確認ポイント："+m.check); }
 function tryAutoConfirm(){ const r=state.rows[sel]; if(r.ok||!r.hin) return; const m=mFind(r.hin); if(m) pickMaster(m); }
-hinInp.addEventListener("input",()=>{ if(VIEW) return; const r=state.rows[sel]; r.hin=hinInp.value.toUpperCase(); r.ok=false; const [c,t]=hinStatus(r); $("hinSt").className="hinst "+c; $("hinSt").textContent=t; showSugg(r.hin); touchRow(sel); renderChips(); renderTable(); });
+hinInp.addEventListener("input",()=>{ if(VIEW) return; const r=state.rows[sel]; r.hin=hinInp.value.toUpperCase(); r.ok=false; const [c,t]=hinStatus(r); $("hinSt").className="hinst "+c; $("hinSt").textContent=t; showSugg(r.hin); touchRow(sel); renderChips(); renderTable(); renderMiss(); missStartWarn(); });
 hinInp.addEventListener("keydown",e=>{ if(sugg.list.length&&(e.key==="ArrowDown"||e.key==="ArrowUp")){ e.preventDefault(); sugg.act=(sugg.act+(e.key==="ArrowDown"?1:-1)+sugg.list.length)%sugg.list.length; suggBox.querySelectorAll("button").forEach((b,x)=>b.classList.toggle("act",x===sugg.act)); return; }
   if(e.key==="Enter"){ e.preventDefault(); if(sugg.list.length) pickMaster(mFind(hinInp.value)||sugg.list[sugg.act]); else tryAutoConfirm(); } if(e.key==="Escape") hideSugg(); });
 suggBox.addEventListener("pointerdown",e=>{ const b=e.target.closest("[data-pick]"); if(!b) return; e.preventDefault(); pickMaster(sugg.list[+b.dataset.pick]); });
