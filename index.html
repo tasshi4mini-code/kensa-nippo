@@ -253,6 +253,15 @@ html,body,button,input,select,textarea,label,.chip{touch-action:manipulation}
 /* v18：バリ取りのみ */
 .baribtn{min-height:44px;padding:0 14px;border-radius:10px;border:2px solid #ef6c00;background:#fff;color:#ef6c00;font-weight:bold;font-size:16px;cursor:pointer}
 .baribtn.on{background:#ef6c00;color:#fff}
+/* v28：製品不足・検査途中 */
+.stbtn{min-height:44px;padding:0 14px;border-radius:10px;font-weight:bold;font-size:16px;cursor:pointer;background:#fff}
+.stbtn.short{border:2px solid #6a1b9a;color:#6a1b9a}.stbtn.short.on{background:#6a1b9a;color:#fff}
+.stbtn.mid{border:2px solid #00838f;color:#00838f}.stbtn.mid.on{background:#00838f;color:#fff}
+.stbtn.on .id{color:#fff}
+.stnote{margin:6px 0;padding:8px 12px;border-radius:10px;font-weight:bold;font-size:16px}
+.stnote.short{background:#f3e5f5;color:#4a148c;border:2px solid #6a1b9a}.stnote.mid{background:#e0f7fa;color:#006064;border:2px solid #00838f}
+.stnote.cont{background:#e8f5e9;color:#1b5e20;border:2px solid #2e7d32}
+.chip .stt{display:block;font-size:10px;font-weight:bold}
 #entryCard.bari{border:3px solid #ef6c00;background:#fff8ef}
 #entryCard.bari .bigno{background:#ef6c00;color:#fff;border-color:#ef6c00}
 .barinote{flex:1 1 100%;background:#ffe0b2;color:#7a3e00;border-radius:8px;padding:6px 10px;font-weight:bold;font-size:14px}
@@ -315,6 +324,8 @@ tr.bari td{background:#fff3e0}
       <div class="bigno" id="bigNo">検査 1</div>
       <div class="contbar" id="contBar" hidden></div>
       <span class="sp" style="flex:1"></span>
+      <button class="stbtn short" id="btnShort">📦 製品不足 <span class="id">Produk kurang</span></button>
+      <button class="stbtn mid" id="btnMid">⏸ 検査途中 <span class="id">Belum selesai</span></button>
       <button class="baribtn" id="btnBari">✂ バリ取りのみ <span class="id">Hanya buang burr</span></button>
       <button id="btnClearRow">この記録をクリア</button>
     </div>
@@ -568,7 +579,7 @@ function renderEquipSel(){ const list=inspList(), cur=state?state.equip:defaultE
   $("equip").style.outline=cur===NOSEL?"3px solid #ffeb3b":""; }
 function needInsp(){ if(state.equip!==NOSEL) return false; toast("先に画面上の「作業者」で自分の名前を選んでください / Pilih nama Anda dulu"); $("equip").focus(); return true; }
 function renderChips(){ $("chips").innerHTML=state.rows.map((r,i)=>r.bari?`<button class="chip bari ${ngOf(r)?"ng":""} ${i===sel?"sel":""}" data-i="${i}">✂バリ取り${i+1}<small>${esc(r.hin||"－")}${ngOf(r)?" NG"+ngOf(r):""}</small></button>`
-    :`<button class="chip ${missShow(i)?"miss":(isBad(r)?"ng":(rowHas(r)?"filled":""))} ${i===sel?"sel":""}" data-i="${i}">検査${i+1}<small>${esc(r.hin||"－")}</small></button>`).join(""); }
+    :`<button class="chip ${missShow(i)?"miss":(isBad(r)?"ng":(rowHas(r)?"filled":""))} ${i===sel?"sel":""}" data-i="${i}">検査${i+1}<small>${esc(r.hin||"－")}</small>${stTxt(r)?`<span class="stt">${stTxt(r)}</span>`:""}</button>`).join(""); }
 function renderHeader(){ $("date").value=state.date; renderEquipSel(); $("inspName").textContent=state.equip; $("confirmBy").value=state.confirmBy; renderMasterStat(); }
 function renderMasterStat(){ const n=MIDX.length, at=MASTER.at?new Date(MASTER.at):null;
   const t=n?`品番マスター：${n}件` + (at?`（${at.getMonth()+1}/${at.getDate()} ${at.getHours()}:${String(at.getMinutes()).padStart(2,"0")} 読込）`:"") : "品番マスターが未登録です（設定 → マスターをExcelから更新）";
@@ -596,7 +607,7 @@ function renderEntry(){ const r=state.rows[sel];
     n.innerHTML="✂ バリ取りのみ（検査はしていない）：総数は入れなくてよい。バリ取り中に見つけた不良だけ入れてください / Hanya buang burr: masukkan cacat saja"; }
   document.querySelectorAll("#entryCard [data-k]").forEach(inp=>{ const k=inp.dataset.k; inp.value=r[k]||"";
     if(k==="lot"&&!r.lot){ const p=prevLot(sel); inp.placeholder=p?"前回 "+p:"例 C26-9-23"; } });
-  const [c,t]=hinStatus(r); $("hinSt").className="hinst "+c; $("hinSt").textContent=t; renderMiss();
+  const [c,t]=hinStatus(r); $("hinSt").className="hinst "+c; $("hinSt").textContent=t; renderMiss(); renderSt();
   renderLots(); renderDefs(); updateMarks(); }
 function prevLot(i){ for(let j=i-1;j>=0;j--){ const r=state.rows[j]; lotInit(r); if(r.lot1) return r.lot2||r.lot1; } return ""; }
 function renderLots(){ const r=state.rows[sel]; lotInit(r); const two=!!r.lot2||r.show2;
@@ -687,7 +698,7 @@ function hideSugg(){ suggBox.hidden=true; suggBox.innerHTML=""; sugg={list:[],ac
 function pickMaster(m){ const r=state.rows[sel]; r.hin=m.hin; r.name=m.name||""; r.ok=true; hideSugg(); touchRow(sel); renderEntry(); refreshLight();
   if(m.check) toast("⚠ 確認ポイント："+m.check); }
 function tryAutoConfirm(){ const r=state.rows[sel]; if(r.ok||!r.hin) return; const m=mFind(r.hin); if(m) pickMaster(m); }
-hinInp.addEventListener("input",()=>{ if(VIEW) return; const r=state.rows[sel]; r.hin=hinInp.value.toUpperCase(); r.ok=false; const [c,t]=hinStatus(r); $("hinSt").className="hinst "+c; $("hinSt").textContent=t; showSugg(r.hin); touchRow(sel); renderChips(); renderTable(); renderMiss(); missStartWarn(); });
+hinInp.addEventListener("input",()=>{ if(VIEW) return; const r=state.rows[sel]; r.hin=hinInp.value.toUpperCase(); r.ok=false; const [c,t]=hinStatus(r); $("hinSt").className="hinst "+c; $("hinSt").textContent=t; showSugg(r.hin); touchRow(sel); renderChips(); renderTable(); renderMiss(); missStartWarn(); clearTimeout(window.__acT); window.__acT=setTimeout(askCont,1200); });
 hinInp.addEventListener("keydown",e=>{ if(sugg.list.length&&(e.key==="ArrowDown"||e.key==="ArrowUp")){ e.preventDefault(); sugg.act=(sugg.act+(e.key==="ArrowDown"?1:-1)+sugg.list.length)%sugg.list.length; suggBox.querySelectorAll("button").forEach((b,x)=>b.classList.toggle("act",x===sugg.act)); return; }
   if(e.key==="Enter"){ e.preventDefault(); if(sugg.list.length) pickMaster(mFind(hinInp.value)||sugg.list[sugg.act]); else tryAutoConfirm(); } if(e.key==="Escape") hideSugg(); });
 suggBox.addEventListener("pointerdown",e=>{ const b=e.target.closest("[data-pick]"); if(!b) return; e.preventDefault(); pickMaster(sugg.list[+b.dataset.pick]); });
@@ -745,6 +756,24 @@ $("events").addEventListener("click",async e=>{ const d=e.target.dataset.del; if
 // v18：バリ取りのみ（検査はしない。不良が見つかったら不良として数える）
 $("btnBari").onclick=()=>{ if(VIEW||needInsp()) return; const r=state.rows[sel]; r.bari=!r.bari; if(r.bari&&!r.st) r.st=nowHM(); touchRow(sel); renderEntry(); refreshLight();
   toast(r.bari?"✂ バリ取りのみにしました（総数は入れなくてよい・不良だけ入れる）":"検査にもどしました"); };
+// v28：「製品不足」「検査途中」のボタン
+function stTxt(r){ return r.short?"製品不足":r.mid?"検査途中":r.contOf?"前日の続き":""; }
+function setSt(k){ if(VIEW||needInsp()) return; const r=state.rows[sel]; if(!r.hin){ toast("先に品番を入れてください"); return; }
+  const on=!r[k]; r.short=false; r.mid=false; r[k]=on; if(on&&!r.en) r.en=nowHM();
+  touchRow(sel); renderEntry(); refreshLight();
+  toast(on?(k==="short"?"📦 製品不足にしました（製品が足りず、ここで検査終了）":"⏸ 検査途中にしました。翌日この品番を入れると続きから入れられます（今日検査した数を総数に入れてください）"):"もとにもどしました"); }
+$("btnShort").onclick=()=>setSt("short"); $("btnMid").onclick=()=>setSt("mid");
+function renderSt(){ if(!state) return; const r=state.rows[sel]; $("btnShort").classList.toggle("on",!!r.short); $("btnMid").classList.toggle("on",!!r.mid); [$("btnShort"),$("btnMid")].forEach(b=>b.disabled=VIEW||!!r.bari);
+  let n=$("stNote"); if(!n){ n=document.createElement("div"); n.id="stNote"; $("btnBari").closest(".eh").after(n); }
+  n.hidden=!(r.short||r.mid); n.className="stnote "+(r.short?"short":"mid");
+  n.innerHTML=r.short?"📦 製品不足：製品が足りず、この検査はここで終わりました（入り数に足りなくてもOK） / Produk kurang":r.mid?"⏸ 検査途中：総数には<b>今日検査した数</b>を入れてください。翌日この品番を入れると続きから入れられます（集計で重なりません） / Lanjut besok":""; }
+// 品番を入れたとき：前の日に「検査途中」の同じ品番があれば、続きか聞く
+let contAsked="";
+async function askCont(){ if(VIEW||!state||state.date!==todayStr()) return; const r=state.rows[sel]; if(r.contOf||r.contFrom||rowHasExcept(r)) return; const h=normHin(r.hin); if(!h) return;
+  const c=PEND.filter(p=>!p.done&&normHin(p.r.hin)===h); if(!c.length) return; const key=sel+"|"+h; if(contAsked===key) return; contAsked=key; const p=c[0];
+  const ok=await askConfirm(`⏸ ${p.date.slice(5).replace("-","/")} ${p.equip}さんの検査${p.no}（${p.r.hin}）が「検査途中」になっています。\n前日まで ${(num(p.r.prevTot)||0)+(num(p.r.total)||0)} 個 検査済み。\n\nこの続きですか？\nOK：続きから入れる（ロット・品名を引きつぐ）\nキャンセル：別の検査として入れる`);
+  if(ok) applyCont(sel,p); }
+function rowHasExcept(r){ return ["pal","total","freq","note"].some(k=>(r[k]||"")!=="")||ngOf(r)>0; }
 // v18：前の日の検査未完了（開始があって終了が空）を、次の日の日報に候補として出す（全員分）
 let PEND=[], pendBusy=false;
 async function loadPend(){ const box=$("pendBox"); if(!box) return; if(VIEW||!state||state.date!==todayStr()||!Sync.on()){ box.hidden=true; return; } if(pendBusy) return; pendBusy=true;
@@ -753,24 +782,27 @@ async function loadPend(){ const box=$("pendBox"); if(!box) return; if(VIEW||!st
     days=days.filter(x=>x.equip&&x.equip!=="未設定"&&!String(x.date).startsWith("_"));
     const prev=days.filter(x=>x.date<d0).map(x=>x.date).sort().pop(); if(!prev){ PEND=[]; renderPend(); return; }
     const getRows=async(date,e)=>{ const u=c.syncUrl+(c.syncUrl.includes("?")?"&":"?")+new URLSearchParams({action:"load",token:c.token,date,equip:e}); const j=await (await fetch(u,{redirect:"follow"})).json(); const rows=[]; (j.items||[]).forEach(it=>{ if(it.type==="row") rows[+it.ref]=it.raw||{}; }); return rows; };
-    const P=[]; for(const x of days.filter(x=>x.date===prev)){ try{ (await getRows(prev,x.equip)).forEach((r,i)=>{ if(r&&r.hin&&r.st&&!r.en&&!r.contDone) P.push({date:prev,equip:x.equip,no:i+1,r}); }); }catch(e){} }
+    const P=[]; for(const x of days.filter(x=>x.date===prev)){ try{ (await getRows(prev,x.equip)).forEach((r,i)=>{ if(r&&r.hin&&(r.mid||(r.st&&!r.en&&!r.short))&&!r.contDone) P.push({date:prev,equip:x.equip,no:i+1,r}); }); }catch(e){} }
     // 今日の日報で、もう続きを入れたもの（だれの日報でも）
-    const used=new Set(); for(const x of days.filter(x=>x.date===d0&&x.equip!==state.equip)){ try{ (await getRows(d0,x.equip)).forEach(r=>{ if(r&&r.contFrom) used.add(r.contFrom); }); }catch(e){} }
-    state.rows.forEach(r=>{ if(r.contFrom) used.add(r.contFrom); });
+    const used=new Set(); for(const x of days.filter(x=>x.date===d0&&x.equip!==state.equip)){ try{ (await getRows(d0,x.equip)).forEach(r=>{ if(r&&r.contFrom) used.add(r.contFrom); if(r&&r.contOf) used.add(r.contOf); }); }catch(e){} }
+    state.rows.forEach(r=>{ if(r.contFrom) used.add(r.contFrom); if(r.contOf) used.add(r.contOf); });
     PEND=P.map(p=>Object.assign(p,{done:[...used].some(k=>k===`${p.date}|${p.no}|${p.equip}`||(k===`${p.date}|${p.no}`&&p.equip===state.equip))}));
     renderPend(); }
   catch(e){} finally{ pendBusy=false; } }
 function renderPend(){ const box=$("pendBox"); if(!box) return; if(!PEND.length||!state||state.date!==todayStr()){ box.hidden=true; return; }
   const md=d=>{ const [,m,dd]=d.split("-"); return `${+m}/${+dd}`; };
   box.hidden=false; box.innerHTML=`<h3>⏸ 前の日（${md(PEND[0].date)}）に終わっていない検査 <span class="id">Belum selesai kemarin</span></h3>`+
-    PEND.map((p,k)=>`<div class="pi ${p.done?"done":""}"><b>${esc(p.equip)}</b><span>${p.r.bari?"✂バリ取り":"検査"}${p.no}</span><b>${esc(p.r.hin)}</b><span class="sm">${esc(p.r.lot||"")}　${esc(p.r.st)}〜（終了なし）${p.r.total?"　総数 "+esc(p.r.total):""}</span>`+
+    PEND.map((p,k)=>`<div class="pi ${p.done?"done":""}"><b>${esc(p.equip)}</b><span>${p.r.bari?"✂バリ取り":"検査"}${p.no}</span><b>${esc(p.r.hin)}</b><span class="sm">${esc(p.r.lot||"")}　${p.r.mid?`⏸検査途中 ${esc(p.r.st||"")}〜${esc(p.r.en||"")}`:`${esc(p.r.st)}〜（終了なし）`}${p.r.total||p.r.prevTot?"　前日まで "+((num(p.r.prevTot)||0)+(num(p.r.total)||0))+"個":""}</span>`+
       `<button data-pend="${k}" ${p.done?"disabled":""}>${p.done?"続きを入れ済み":"この続きを入れる"}</button></div>`).join(""); }
 $("pendBox").addEventListener("click",e=>{ const b=e.target.closest("[data-pend]"); if(!b||VIEW||needInsp()) return; const p=PEND[+b.dataset.pend]; if(!p||p.done) return;
   let i=sel; if(rowHas(state.rows[i])) i=state.rows.findIndex(r=>!rowHas(r)); if(i<0){ toast("空いている記録がありません"); return; }
-  const r=state.rows[i]; ["hin","name","ok","lot","lot1","lot2","t1","t2","total","show2","bari"].forEach(k=>{ if(p.r[k]!=null) r[k]=p.r[k]; });
-  ["t1","t2","total","lot1","lot2"].forEach(k=>{ if(r[k]==null) r[k]=""; });
-  r.contFrom=`${p.date}|${p.no}|${p.equip}`; r.contNote=`${p.date.slice(5).replace("-","/")} ${p.equip} ${p.r.bari?"バリ取り":"検査"}${p.no}`; r.st=nowHM(); p.done=true;
-  sel=i; touchRow(i); renderAll(); renderPend(); toast(`${p.equip}さんの検査${p.no}（${p.r.hin}）の続きを${i+1}番に入れました`); });
+  applyCont(i,p); });
+// v28：続きを入れる（前日の数は「前日まで ○個」として持ち、今日の行には今日検査した数だけ入れる → 集計で重ならない）
+function applyCont(i,p){ const r=state.rows[i]; ["hin","name","ok","lot","lot1","lot2","show2","bari"].forEach(k=>{ if(p.r[k]!=null) r[k]=p.r[k]; });
+  r.total=""; r.t1=""; r.t2=""; r.mid=false; r.short=false; r.en="";
+  r.contOf=`${p.date}|${p.no}|${p.equip}`; r.contNote=`${p.date.slice(5).replace("-","/")} ${p.equip} ${p.r.bari?"バリ取り":"検査"}${p.no}`;
+  r.prevTot=String((num(p.r.prevTot)||0)+(num(p.r.total)||0)); r.st=nowHM(); p.done=true;
+  sel=i; touchRow(i); renderAll(); renderPend(); toast(`${p.equip}さんの検査${p.no}（${p.r.hin}）の続きを${i+1}番に入れました。前日まで ${r.prevTot} 個。今日検査した数だけ入れてください`); }
 // 日付・作業者の切り替え
 function switchDay(){ const d=$("date").value, q=$("equip").value; if(!d||!q) return; load(d,q); sel=Math.max(0,state.rows.findIndex(r=>!rowHas(r))); renderAll(); PEND=[]; renderPend(); setTimeout(loadPend,1200); Promise.resolve(Sync.pull()).then(carryOver); }
 $("date").addEventListener("change",switchDay);
@@ -920,7 +952,7 @@ const DATA_HEAD0=["検査日","作業者","No","パレット内残品","検査�
 const DATA_HEAD=[...DATA_HEAD0,"区分"];
 function dataRows(){ const out=[DATA_HEAD];
   state.rows.forEach((r,i)=>{ if(!rowHas(r)) return; const x=rateOf(r);
-    lotInit(r); const base=(lot,t,d,n,rt,lk)=>[state.date,state.equip,i+1,r.pal,r.st,r.en,lot,r.hin,r.name,r.hin?(r.ok?"○":"×"):"",r.bari?"":t,...DEFK.map(k=>d[k]),n||"",(rt==null||r.bari)?"":rt,r.freq,fixTxt(r),r.note,state.confirmBy,lk,r.bari?"バリ取り":"検査"];
+    lotInit(r); const base=(lot,t,d,n,rt,lk)=>[state.date,state.equip,i+1,r.pal,r.st,r.en,lot,r.hin,r.name,r.hin?(r.ok?"○":"×"):"",r.bari?"":t,...DEFK.map(k=>d[k]),n||"",(rt==null||r.bari)?"":rt,r.freq,fixTxt(r),r.note,state.confirmBy,lk,(r.bari?"バリ取り":"検査")+(stTxt(r)?"・"+stTxt(r):"")];
     if(r.lot2){ const d1=r.d1||r.d, d2=r.d2||{}; out.push(base(r.lot1,r.t1,d1,ngD(d1),rateD(d1,r.t1),"1")); out.push(base(r.lot2,r.t2,Object.assign(blankD(),d2),ngD(d2),rateD(d2,r.t2),"2")); }
     else out.push(base(r.lot,r.total,r.d,ngOf(r),x==null?null:Math.round(x*100)/100,"")); });
   return out; }
@@ -975,7 +1007,7 @@ function buildNippoSheet(){
   state.rows.forEach((r,i)=>{ if(!rowHas(r)) return; const n=ngOf(r), b=!!r.bari, B0=b?BB:B; if(b){ nb++; nbn+=n; } else tt+=num(r.total)||0; tn+=n;
     S.set(0,y,i+1,B0); S.set(1,y,r.pal,r.pal==="NG"?NG:B0); S.set(2,y,(r.st||r.en)?`${r.st}〜${r.en}`:"",B0); S.set(3,y,r.lot,B0); S.set(4,y,r.hin+(r.hin&&!r.ok&&MIDX.length?" *":""),b?BBL:st({border:1,h:"left"})); S.set(5,y,r.name,B0); S.set(6,y,b?"バリ取り":r.total,b?BBT:B);
     DEFK.forEach((k,j)=>{ const v=num(r.d[k]); td[k]+=v||0; S.set(7+j,y,v||"",v?(k==="ware"?NG:WN):B0); });
-    const c=7+DEFK.length; S.set(c,y,n||"",n?NG:B0); const x=rateOf(r); S.set(c+1,y,b?"":(x==null?"":(Math.round(x*100)/100)+"%"),B0); S.set(c+2,y,r.freq,B0); S.set(c+3,y,fixTxt(r),B0); S.set(c+4,y,(b?"バリ取りのみ（検査なし）":"")+(b&&r.note?"／":"")+(r.note||""),b?BBW:BL); y++; });
+    const c=7+DEFK.length; S.set(c,y,n||"",n?NG:B0); const x=rateOf(r); S.set(c+1,y,b?"":(x==null?"":(Math.round(x*100)/100)+"%"),B0); S.set(c+2,y,r.freq,B0); S.set(c+3,y,fixTxt(r),B0); S.set(c+4,y,[b?"バリ取りのみ（検査なし）":"",r.short?"製品不足":"",r.mid?"検査途中（翌日に続く）":"",r.contOf?`${r.contNote||"前日"}の続き（前日まで${num(r.prevTot)||0}個）`:"",r.note||""].filter(Boolean).join("／"),b?BBW:BL); y++; });
   const HS=st({font:1,border:1,h:"center",fill:"head"}); S.merge(0,y,5,y,"合計",HS); S.set(6,y,tt||"",HS); DEFK.forEach((k,j)=>S.set(7+j,y,td[k]||"",HS)); const c=7+DEFK.length;
   S.set(c,y,tn||"",HS); S.set(c+1,y,(tt+tn-nbn)?(Math.round((tn-nbn)/(tt+tn-nbn)*10000)/100)+"%":"",HS); S.merge(c+2,y,L,y,nb?`うちバリ取り ${nb} 件・不良 ${nbn}`:"",nb?st({font:1,border:1,h:"center",fill:"bari"}):HS); y+=2;
   S.merge(0,y,L,y,"その他作業",st({font:1,fill:"head",border:1})); y++;
@@ -1136,13 +1168,12 @@ async function carryOver(){ if(VIEW||carryBusy||!state||state.date!==todayStr()|
     try{ const j=await (await fetch(u,{redirect:"follow"})).json(); if(j.ok){ rows=[]; (j.items||[]).forEach(it=>{ if(it.type==="row") rows[+it.ref]=it.raw||{}; }); } }catch(e){}
     if((!rows||!rows.length)&&lc) rows=lc.rows||[];
     if(!rows) return; let li=-1; rows.forEach((r,i)=>{ if(r&&r.hin) li=i; }); if(li<0) return; const p=rows[li];
-    if(!p.st||p.en) return;   // 検査開始があって、検査終了が空 → 途中で終わった
+    if(!(p.mid||(p.st&&!p.en&&!p.short))) return;   // 「検査途中」を押した、または検査開始があって終了が空 → 途中で終わった
     if(state.date!==d0||state.equip!==e0||state.rows.some(rowHas)) return;
-    const r=state.rows[0]; ["hin","name","ok","lot","lot1","lot2","t1","t2","total","show2"].forEach(k=>{ if(p[k]!=null) r[k]=p[k]; });
-    const [,mm,dd]=prev.split("-"); r.contFrom=`${prev}|${li+1}`; r.contNote=`${+mm}/${+dd} 検査${li+1}`;
-    sel=0; touchRow(0); renderAll(); toast(`前日（${+mm}/${+dd}）の検査${li+1}（${p.hin}）の続きを1番に入れました`);
+    applyCont(0,{date:prev,equip:e0,no:li+1,r:p});
   }catch(e){} finally{ carryBusy=false; } }
-function renderCont(){ const b=$("contBar"); if(!b||!state) return; const r=state.rows[sel]; b.hidden=!(r&&r.contFrom); if(r&&r.contFrom) b.textContent=`↪ 前日（${r.contNote||r.contFrom}）から続けて検査しています / Lanjutan kemarin`; }
+function renderCont(){ const b=$("contBar"); if(!b||!state) return; const r=state.rows[sel]; b.hidden=!(r&&(r.contFrom||r.contOf)); if(r&&r.contFrom) b.textContent=`↪ 前日（${r.contNote||r.contFrom}）から続けて検査しています / Lanjutan kemarin`;
+  if(r&&r.contOf){ const pv=num(r.prevTot)||0, t=num(r.total); b.textContent=`↪ ${r.contNote||r.contOf} の続き：前日まで ${pv} 個 検査済み。今日検査した数だけ入れてください`+(t!=null?`（合計 ${pv+t} 個）`:""); } }
 const Sync=(function(){
   const base=Object.assign({syncUrl:"",token:""},window.SUNA_CONFIG||{});
   let cfg=Object.assign({},base,LS.get(APP+":cfg",{}));
